@@ -1,0 +1,162 @@
+"""SpacetimeGateway: the backend's only path to Orbit application state.
+
+Transport is the documented SpacetimeDB HTTP API (PRD §5 MVP choice). Reads go
+through caller-scoped/service-gated views with the service token; writes go
+through reducers that re-check authorization. Swap the transport here (e.g. a
+TypeScript SDK bridge) without touching workers.
+"""
+
+import logging
+import re
+from collections.abc import Sequence
+from typing import Any, TypeVar
+
+import httpx
+from pydantic import BaseModel, SecretStr, ValidationError
+
+from app.state.dto import InvestmentProfileV1, JobV1, ServiceGrantV1
+from app.state.sats_json import SatsDecodeError, decode_result_set
+
+log = logging.getLogger(__name__)
+
+_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+M = TypeVar("M", bound=BaseModel)
+
+
+class GatewayError(Exception):
+    """Base class; `code` is safe to surface to clients."""
+
+    code = "state_gateway_error"
+    retryable = False
+
+
+class GatewayUnavailable(GatewayError):
+    code = "state_unavailable"
+    retryable = True
+
+
+class GatewayAuthError(GatewayError):
+    code = "state_auth_failed"
+
+
+class GatewayContractError(GatewayError):
+    code = "state_contract_mismatch"
+
+
+class ReducerRejected(GatewayError):
+    """A reducer threw SenderError. `code` is the module's stable error code."""
+
+    def __init__(self, reducer: str, code: str):
+        super().__init__(f"{reducer} rejected: {code}")
+        self.reducer = reducer
+        self.code = code
+
+
+class SpacetimeGateway:
+    def __init__(
+        self,
+        base_url: str,
+        database: str,
+        token: SecretStr | None,
+        *,
+        timeout: float = 10.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
+        headers = {"Authorization": f"Bearer {token.get_secret_value()}"} if token else {}
+        self._db = database
+        self._client = httpx.AsyncClient(
+            base_url=base_url.rstrip("/"), headers=headers, timeout=timeout, transport=transport
+        )
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    async def __aenter__(self) -> "SpacetimeGateway":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.aclose()
+
+    # ---- transport ----
+
+    async def _post(self, path: str, **kwargs: Any) -> httpx.Response:
+        try:
+            response = await self._client.post(path, **kwargs)
+        except httpx.TimeoutException as exc:
+            raise GatewayUnavailable("timeout") from exc
+        except httpx.TransportError as exc:
+            raise GatewayUnavailable(type(exc).__name__) from exc
+        return response
+
+    def _raise_for_status(self, response: httpx.Response, *, reducer: str | None = None) -> None:
+        status = response.status_code
+        if status < 300:
+            return
+        body = response.text.strip()
+        if status == 530 and reducer is not None:
+            code = body if _CODE_PATTERN.match(body) else "reducer_error"
+            raise ReducerRejected(reducer, code)
+        if status in (401, 403):
+            raise GatewayAuthError(f"HTTP {status}")
+        if 400 <= status < 500:
+            # Do not echo server bodies upward; log a bounded excerpt for operators.
+            log.warning("spacetime contract error HTTP %s: %.200s", status, body)
+            raise GatewayContractError(f"HTTP {status}")
+        raise GatewayUnavailable(f"HTTP {status}")
+
+    async def ping(self) -> bool:
+        try:
+            response = await self._client.get("/v1/ping")
+        except httpx.HTTPError:
+            return False
+        return response.status_code == 200
+
+    async def sql(self, query: str) -> list[list[dict[str, Any]]]:
+        response = await self._post(f"/v1/database/{self._db}/sql", content=query.encode())
+        self._raise_for_status(response)
+        try:
+            return [decode_result_set(result) for result in response.json()]
+        except (ValueError, SatsDecodeError) as exc:
+            raise GatewayContractError("undecodable SQL result") from exc
+
+    async def call_reducer(self, reducer: str, args: Sequence[Any]) -> None:
+        response = await self._post(f"/v1/database/{self._db}/call/{reducer}", json=list(args))
+        self._raise_for_status(response, reducer=reducer)
+
+    # ---- typed reads (views) ----
+
+    async def _view(self, view: str) -> list[dict[str, Any]]:
+        (rows,) = await self.sql(f"SELECT * FROM {view}")
+        return rows
+
+    @staticmethod
+    def _parse(model: type[M], rows: list[dict[str, Any]]) -> list[M]:
+        try:
+            return [model.model_validate(row) for row in rows]
+        except ValidationError as exc:
+            raise GatewayContractError(f"{model.__name__} contract mismatch") from exc
+
+    async def service_grant(self) -> ServiceGrantV1 | None:
+        rows = self._parse(ServiceGrantV1, await self._view("my_service_grant"))
+        return rows[0] if rows else None
+
+    async def worker_jobs(self) -> list[JobV1]:
+        return self._parse(JobV1, await self._view("worker_jobs"))
+
+    async def worker_job_profiles(self) -> list[InvestmentProfileV1]:
+        return self._parse(InvestmentProfileV1, await self._view("worker_job_profiles"))
+
+    async def my_jobs(self) -> list[JobV1]:
+        return self._parse(JobV1, await self._view("my_jobs"))
+
+    # ---- worker reducers ----
+
+    async def claim_job(self, job_id: int, lease_seconds: int) -> None:
+        await self.call_reducer("claim_job", [job_id, lease_seconds])
+
+    async def complete_job(self, job_id: int, attempt: int, input_version: int, result_ref: str) -> None:
+        await self.call_reducer("complete_job", [job_id, attempt, input_version, result_ref])
+
+    async def fail_job(self, job_id: int, attempt: int, error_code: str, retryable: bool) -> None:
+        await self.call_reducer("fail_job", [job_id, attempt, error_code, retryable])

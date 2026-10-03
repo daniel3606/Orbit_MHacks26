@@ -1,0 +1,332 @@
+[
+    {
+        "schema": {
+            "elements": [
+                {
+                    "name": {
+                        "some": "job_id"
+                    },
+                    "algebraic_type": {
+                        "U64": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "owner"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__identity__"
+                                    },
+                                    "algebraic_type": {
+                                        "U256": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "kind"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "request_key"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "input_version"
+                    },
+                    "algebraic_type": {
+                        "U32": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "status"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "attempt_count"
+                    },
+                    "algebraic_type": {
+                        "U32": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "max_attempts"
+                    },
+                    "algebraic_type": {
+                        "U32": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "lease_owner"
+                    },
+                    "algebraic_type": {
+                        "Sum": {
+                            "variants": [
+                                {
+                                    "name": {
+                                        "some": "some"
+                                    },
+                                    "algebraic_type": {
+                                        "Product": {
+                                            "elements": [
+                                                {
+                                                    "name": {
+                                                        "some": "__identity__"
+                                                    },
+                                                    "algebraic_type": {
+                                                        "U256": []
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "name": {
+                                        "some": "none"
+                                    },
+                                    "algebraic_type": {
+                                        "Product": {
+                                            "elements": []
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "lease_until"
+                    },
+                    "algebraic_type": {
+                        "Sum": {
+                            "variants": [
+                                {
+                                    "name": {
+                                        "some": "some"
+                                    },
+                                    "algebraic_type": {
+                                        "Product": {
+                                            "elements": [
+                                                {
+                                                    "name": {
+                                                        "some": "__timestamp_micros_since_unix_epoch__"
+                                                    },
+                                                    "algebraic_type": {
+                                                        "I64": []
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "name": {
+                                        "some": "none"
+                                    },
+                                    "algebraic_type": {
+                                        "Product": {
+                                            "elements": []
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "available_at"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__timestamp_micros_since_unix_epoch__"
+                                    },
+                                    "algebraic_type": {
+                                        "I64": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "payload"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "result_ref"
+                    },
+                    "algebraic_type": {
+                        "Sum": {
+                            "variants": [
+                                {
+                                    "name": {
+                                        "some": "some"
+                                    },
+                                    "algebraic_type": {
+                                        "String": []
+                                    }
+                                },
+                                {
+                                    "name": {
+                                        "some": "none"
+                                    },
+                                    "algebraic_type": {
+                                        "Product": {
+                                            "elements": []
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "error_code"
+                    },
+                    "algebraic_type": {
+                        "Sum": {
+                            "variants": [
+                                {
+                                    "name": {
+                                        "some": "some"
+                                    },
+                                    "algebraic_type": {
+                                        "String": []
+                                    }
+                                },
+                                {
+                                    "name": {
+                                        "some": "none"
+                                    },
+                                    "algebraic_type": {
+                                        "Product": {
+                                            "elements": []
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "created_at"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__timestamp_micros_since_unix_epoch__"
+                                    },
+                                    "algebraic_type": {
+                                        "I64": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "updated_at"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__timestamp_micros_since_unix_epoch__"
+                                    },
+                                    "algebraic_type": {
+                                        "I64": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "rows": [
+            [
+                1,
+                [
+                    "0xc2007d6e21ab270d6292d39715e8435afb5707a56baf2728036f77f9484b5ea6"
+                ],
+                "refresh_recommendations",
+                "refresh:v1",
+                1,
+                "queued",
+                0,
+                5,
+                [
+                    1,
+                    []
+                ],
+                [
+                    1,
+                    []
+                ],
+                [
+                    1791044581177591
+                ],
+                "{}",
+                [
+                    1,
+                    []
+                ],
+                [
+                    1,
+                    []
+                ],
+                [
+                    1791044581177591
+                ],
+                [
+                    1791044581177591
+                ]
+            ]
+        ],
+        "total_duration_micros": 117,
+        "stats": {
+            "rows_inserted": 0,
+            "rows_deleted": 0,
+            "rows_updated": 0
+        }
+    }
+]

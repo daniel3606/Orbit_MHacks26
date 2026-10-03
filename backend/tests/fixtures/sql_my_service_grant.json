@@ -1,0 +1,71 @@
+[
+    {
+        "schema": {
+            "elements": [
+                {
+                    "name": {
+                        "some": "identity"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__identity__"
+                                    },
+                                    "algebraic_type": {
+                                        "U256": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "label"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "added_at"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__timestamp_micros_since_unix_epoch__"
+                                    },
+                                    "algebraic_type": {
+                                        "I64": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "rows": [
+            [
+                [
+                    "0xc20069b0e50166dfc310580c517a70eb6cad0458e32fbb0f97eede2d86ccd6bb"
+                ],
+                "dev-worker",
+                [
+                    1791044593342416
+                ]
+            ]
+        ],
+        "total_duration_micros": 294,
+        "stats": {
+            "rows_inserted": 0,
+            "rows_deleted": 0,
+            "rows_updated": 0
+        }
+    }
+]

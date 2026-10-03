@@ -1,0 +1,161 @@
+[
+    {
+        "schema": {
+            "elements": [
+                {
+                    "name": {
+                        "some": "owner"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__identity__"
+                                    },
+                                    "algebraic_type": {
+                                        "U256": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "schema_version"
+                    },
+                    "algebraic_type": {
+                        "U16": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "profile_version"
+                    },
+                    "algebraic_type": {
+                        "U32": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "risk_tolerance"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "investment_horizon"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "investment_style"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "sector_interests"
+                    },
+                    "algebraic_type": {
+                        "Array": {
+                            "String": []
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "experience_level"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "primary_goal"
+                    },
+                    "algebraic_type": {
+                        "String": []
+                    }
+                },
+                {
+                    "name": {
+                        "some": "created_at"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__timestamp_micros_since_unix_epoch__"
+                                    },
+                                    "algebraic_type": {
+                                        "I64": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": {
+                        "some": "updated_at"
+                    },
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {
+                                        "some": "__timestamp_micros_since_unix_epoch__"
+                                    },
+                                    "algebraic_type": {
+                                        "I64": []
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "rows": [
+            [
+                [
+                    "0xc2007d6e21ab270d6292d39715e8435afb5707a56baf2728036f77f9484b5ea6"
+                ],
+                1,
+                1,
+                "moderate",
+                "years",
+                "growth",
+                [
+                    "technology",
+                    "healthcare"
+                ],
+                "new",
+                "learn_basics",
+                [
+                    1791044581177591
+                ],
+                [
+                    1791044581177591
+                ]
+            ]
+        ],
+        "total_duration_micros": 82,
+        "stats": {
+            "rows_inserted": 0,
+            "rows_deleted": 0,
+            "rows_updated": 0
+        }
+    }
+]
