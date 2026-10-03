@@ -143,6 +143,38 @@ export const workerJobs = spacetimedb.view(
   }
 );
 
+/** Recent session closes for charts. Prices only; the full bar table stays private. */
+const CHART_SESSIONS = 90;
+
+const marketCloseRow = t.row('MarketClose', {
+  id: t.u64().primaryKey(),
+  ticker: t.string(),
+  sessionDate: t.string(),
+  closeMicros: t.i64(),
+});
+
+export const marketCloses = spacetimedb.view(
+  { name: 'market_closes', public: true },
+  t.array(marketCloseRow),
+  ctx => {
+    const out = [];
+    for (const stock of ctx.db.stock.active.filter(true)) {
+      const bars = [...ctx.db.dailyBar.by_ticker_date.filter(stock.ticker)].sort((a, b) =>
+        a.sessionDate < b.sessionDate ? -1 : a.sessionDate > b.sessionDate ? 1 : 0
+      );
+      for (const bar of bars.slice(-CHART_SESSIONS)) {
+        out.push({
+          id: bar.id,
+          ticker: bar.ticker,
+          sessionDate: bar.sessionDate,
+          closeMicros: bar.closeMicros,
+        });
+      }
+    }
+    return out;
+  }
+);
+
 /** Stored completed-session bars for the active universe (service only). */
 export const workerDailyBars = spacetimedb.view(
   { name: 'worker_daily_bars', public: true },

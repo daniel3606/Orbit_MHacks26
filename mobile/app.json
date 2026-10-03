@@ -8,13 +8,12 @@
     "scheme": "orbit",
     "userInterfaceStyle": "dark",
     "ios": {
-      "icon": "./assets/expo.icon",
       "bundleIdentifier": "dev.orbit.mobile",
       "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B1026",
+        "backgroundColor": "#25163B",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -27,9 +26,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B1026",
+          "backgroundColor": "#050308",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 180
         }
       ],
       "expo-secure-store"

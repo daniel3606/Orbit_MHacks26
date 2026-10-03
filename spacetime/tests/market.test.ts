@@ -252,6 +252,11 @@ describe('versioned snapshot publication', () => {
     assert.ok([...svc.conn.db.workerDailyBars.iter()].some(b => b.ticker === 'AAA' && b.sessionDate === '2026-10-01'));
     assert.equal(user.conn.db.workerDailyBars.count(), 0n);
 
+    await subscribe(user.conn, ['SELECT * FROM market_closes']);
+    const close = [...user.conn.db.marketCloses.iter()].find(b => b.ticker === 'AAA');
+    assert.ok(close);
+    assert.equal(close.closeMicros, 99_000_000n);
+
     // A retried identical publish is a no-op.
     await svc.conn.reducers.publishMarketSnapshot(args);
     assert.equal([...user.conn.db.marketGeneration.iter()][0].generation, firstGeneration);

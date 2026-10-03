@@ -2,13 +2,15 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { money, sessionLabel, signedPct, stamp } from '@/features/market/format';
+import { sessionLabel, signedPct, stamp } from '@/features/market/format';
+import { chartSeries } from '@/features/market/series';
 import { labelFor, SECTORS } from '@/features/onboarding/options';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
 import { PaperOrderCard } from '@/features/trading/PaperOrderCard';
 import { realtime } from '@/realtime/connection';
 import { useRealtime } from '@/realtime/hooks';
 import { Button, Card, Chip, Screen, T } from '@/ui/components';
+import { StockGraph } from '@/ui/StockGraph';
 import { colors, space } from '@/ui/theme';
 
 function fitDetail(coverage: number, fitScore: number): string {
@@ -55,19 +57,21 @@ export default function StockDetailScreen() {
         {stock?.sector ? <Chip label={labelFor(SECTORS, stock.sector)} /> : null}
       </View>
 
-      <Card>
-        <T variant="heading">{quote ? money(quote.price) : 'Price unavailable'}</T>
-        {quote ? (
-          <T variant="caption" muted>
-            {quote.source === 'finnhub' ? 'Finnhub' : quote.source} · {stamp(quote.providerTime)}
-            {change !== null ? ` · ${signedPct(change)} vs previous close` : ''}
-          </T>
-        ) : (
-          <T variant="caption" muted>
-            No quote has been published for this ticker.
-          </T>
-        )}
-      </Card>
+      <StockGraph
+        price={quote?.price ?? null}
+        previousClose={quote?.previousClose}
+        points={chartSeries(rt.market.closes[symbol], quote)}
+      />
+      {quote ? (
+        <T variant="caption" muted>
+          {quote.source === 'finnhub' ? 'Finnhub' : quote.source} · {stamp(quote.providerTime)}
+          {change !== null ? ` · ${signedPct(change)} vs previous close` : ''}
+        </T>
+      ) : (
+        <T variant="caption" muted>
+          No quote has been published for this ticker.
+        </T>
+      )}
 
       {match ? (
         <>

@@ -15,10 +15,12 @@ import {
   signedPoints,
   stamp,
 } from '@/features/market/format';
+import { chartSeries, type ClosePoint } from '@/features/market/series';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
 import { realtime, type QuoteVM, type SignalVM, type StockVM } from '@/realtime/connection';
 import { useRealtime } from '@/realtime/hooks';
 import { Banner, Card, Chip, Row, Screen, T } from '@/ui/components';
+import { StockGraph } from '@/ui/StockGraph';
 import { colors, space } from '@/ui/theme';
 
 /** Publication older than this is shown as stale (scheduled every 5 minutes). */
@@ -150,7 +152,13 @@ export default function MarketScreen() {
       ) : null}
 
       {equities.map(s => (
-        <StockRow key={s.ticker} stock={s} quote={m.quotes[s.ticker]} signal={m.signals[s.ticker]} />
+        <StockRow
+          key={s.ticker}
+          stock={s}
+          quote={m.quotes[s.ticker]}
+          signal={m.signals[s.ticker]}
+          closes={m.closes[s.ticker]}
+        />
       ))}
 
       {benchmarks.length > 0 ? (
@@ -172,10 +180,18 @@ export default function MarketScreen() {
   );
 }
 
-function StockRow({ stock, quote, signal }: { stock: StockVM; quote?: QuoteVM; signal?: SignalVM }) {
+function StockRow({
+  stock,
+  quote,
+  signal,
+  closes,
+}: {
+  stock: StockVM;
+  quote?: QuoteVM;
+  signal?: SignalVM;
+  closes?: ClosePoint[];
+}) {
   const [open, setOpen] = useState(false);
-  const change = quote ? quote.price / quote.previousClose - 1 : null;
-  const changeColor = change === null ? colors.textMuted : change >= 0 ? colors.success : colors.danger;
   const published = signal?.status === 'published' && signal.trendScore !== null;
 
   return (
@@ -184,27 +200,18 @@ function StockRow({ stock, quote, signal }: { stock: StockVM; quote?: QuoteVM; s
       accessibilityState={{ expanded: open }}
       accessibilityHint="Shows signal details"
       onPress={() => setOpen(v => !v)}>
-      <Card>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: space.md }}>
-          <View style={{ flex: 1 }}>
-            <T variant="heading">{stock.ticker}</T>
-            <T variant="caption" muted numberOfLines={1}>
-              {stock.name}
-            </T>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <T variant="heading">{quote ? money(quote.price) : '—'}</T>
-            {change !== null ? (
-              <T variant="caption" color={changeColor}>
-                {signedPct(change)} vs prev. close
-              </T>
-            ) : (
-              <T variant="caption" muted>
-                No valid quote
-              </T>
-            )}
-          </View>
+      <View style={{ gap: space.md }}>
+        <View>
+          <T variant="heading">{stock.ticker}</T>
+          <T variant="caption" muted numberOfLines={1}>
+            {stock.name}
+          </T>
         </View>
+        <StockGraph
+          price={quote?.price ?? null}
+          previousClose={quote?.previousClose}
+          points={chartSeries(closes, quote)}
+        />
 
         {quote ? (
           <T variant="caption" muted>
@@ -268,7 +275,7 @@ function StockRow({ stock, quote, signal }: { stock: StockVM; quote?: QuoteVM; s
             </T>
           </View>
         ) : null}
-      </Card>
+      </View>
     </Pressable>
   );
 }

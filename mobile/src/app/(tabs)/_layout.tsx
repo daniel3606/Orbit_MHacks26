@@ -1,12 +1,20 @@
 import { Tabs } from 'expo-router';
-import { SymbolView, type SFSymbol } from 'expo-symbols';
-import type { ColorValue } from 'react-native';
+import { Image, type ImageSourcePropType } from 'react-native';
 
-import { colors } from '@/ui/theme';
+import { colors, font } from '@/ui/theme';
 
-function icon(name: SFSymbol) {
-  return function TabIcon({ color }: { color: ColorValue }) {
-    return <SymbolView name={name} tintColor={color} size={24} />;
+const ICON = 26;
+
+function tabIcon(active: ImageSourcePropType, inactive: ImageSourcePropType) {
+  return function TabIcon({ focused }: { focused: boolean }) {
+    return (
+      <Image
+        source={focused ? active : inactive}
+        style={{ width: ICON, height: ICON }}
+        resizeMode="contain"
+        accessibilityIgnoresInvertColors
+      />
+    );
   };
 }
 
@@ -15,14 +23,67 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: '#000000',
+          borderTopWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0,
+        },
+        tabBarLabelStyle: { fontFamily: font.regular, fontSize: 11 },
+        tabBarActiveTintColor: colors.tabActive,
+        tabBarInactiveTintColor: colors.tabInactive,
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: icon('sparkles') }} />
-      <Tabs.Screen name="market" options={{ title: 'Market', tabBarIcon: icon('chart.line.uptrend.xyaxis') }} />
-      <Tabs.Screen name="discover" options={{ title: 'Discover', tabBarIcon: icon('scope') }} />
-      <Tabs.Screen name="portfolio" options={{ title: 'Practice', tabBarIcon: icon('chart.pie') }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Home',
+          tabBarIcon: tabIcon(
+            require('../../../assets/icon/home-active.png'),
+            require('../../../assets/icon/home-notactive.png'),
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{
+          title: 'Search',
+          tabBarIcon: tabIcon(
+            require('../../../assets/icon/search-active.png'),
+            require('../../../assets/icon/search-notactive.png'),
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="discover"
+        options={{
+          title: 'Discover',
+          tabBarIcon: tabIcon(
+            require('../../../assets/icon/discover-active.png'),
+            require('../../../assets/icon/discover-notactive.png'),
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="portfolio"
+        options={{
+          title: 'Portfolio',
+          tabBarIcon: tabIcon(
+            require('../../../assets/icon/portfolio-active.png'),
+            require('../../../assets/icon/portfolio-notactive.png'),
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="menu"
+        options={{
+          title: 'Menu',
+          tabBarIcon: tabIcon(
+            require('../../../assets/icon/menu-active.png'),
+            require('../../../assets/icon/menu-notactive.png'),
+          ),
+        }}
+      />
+      <Tabs.Screen name="market" options={{ href: null }} />
     </Tabs>
   );
 }

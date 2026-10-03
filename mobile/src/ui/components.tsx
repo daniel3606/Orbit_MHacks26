@@ -10,9 +10,10 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
-import { colors, HIT, radius, space, type } from './theme';
+import { backgroundGradient, colors, HIT, radius, space, type } from './theme';
 
 type Variant = keyof typeof type;
 
@@ -52,16 +53,18 @@ export function Screen({
   footer?: ReactNode;
 }) {
   return (
-    <SafeAreaView style={styles.screen} edges={edges}>
-      {scroll ? (
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          {children}
-        </ScrollView>
-      ) : (
-        <View style={[styles.content, { flex: 1 }]}>{children}</View>
-      )}
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
-    </SafeAreaView>
+    <LinearGradient colors={backgroundGradient} locations={[0, 0.5, 1] as const} style={styles.fill}>
+      <SafeAreaView style={styles.fill} edges={edges}>
+        {scroll ? (
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
+        ) : (
+          <View style={[styles.content, { flex: 1 }]}>{children}</View>
+        )}
+        {footer ? <View style={styles.footer}>{footer}</View> : null}
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
@@ -86,7 +89,7 @@ export function Button({
       ? { bg: colors.accent, fg: colors.accentText, border: colors.accent }
       : kind === 'danger'
         ? { bg: 'transparent', fg: colors.danger, border: colors.danger }
-        : { bg: 'transparent', fg: colors.text, border: colors.border };
+        : { bg: colors.secondary, fg: colors.secondaryText, border: colors.secondary };
   return (
     <Pressable
       accessibilityRole="button"
@@ -215,7 +218,7 @@ export function Gap({ size = 'lg' }: { size?: keyof typeof space }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
+  fill: { flex: 1 },
   content: { padding: space.xl, gap: space.lg },
   footer: {
     paddingHorizontal: space.xl,
@@ -224,7 +227,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
-    backgroundColor: colors.background,
+    backgroundColor: 'transparent',
   },
   button: {
     minHeight: HIT + 4,

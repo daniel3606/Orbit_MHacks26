@@ -4,12 +4,14 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { requestRecommendations } from '@/features/profile/actions';
 import { labelFor, RISK_TOLERANCE, SECTORS, ZODIAC_SIGNS } from '@/features/onboarding/options';
-import { money, sessionLabel, signedPct, stamp } from '@/features/market/format';
+import { sessionLabel, stamp } from '@/features/market/format';
+import { chartSeries } from '@/features/market/series';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
 import { AppError, messageFor } from '@/realtime/errors';
 import { realtime, type RecommendationVM } from '@/realtime/connection';
 import { useRealtime } from '@/realtime/hooks';
 import { Banner, Button, Card, Chip, Screen, T } from '@/ui/components';
+import { StockGraph } from '@/ui/StockGraph';
 import { colors, space } from '@/ui/theme';
 
 const ACTIVE = new Set(['queued', 'running', 'retry_wait']);
@@ -40,7 +42,6 @@ function MatchCard({ item, onOpen }: { item: RecommendationVM; onOpen: () => voi
   const rt = useRealtime();
   const stock = rt.market.stocks.find(row => row.ticker === item.ticker);
   const quote = rt.market.quotes[item.ticker];
-  const change = quote && quote.previousClose > 0 ? quote.price / quote.previousClose - 1 : null;
   const [open, setOpen] = useState(false);
   const priceLine = quote
     ? `${quote.source === 'finnhub' ? 'Finnhub' : quote.source} price at ${stamp(quote.providerTime)}`
@@ -49,25 +50,24 @@ function MatchCard({ item, onOpen }: { item: RecommendationVM; onOpen: () => voi
       : 'Loading the latest price…';
 
   return (
-    <Card>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.ticker}`} onPress={onOpen}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.md }}>
-          <View style={{ flex: 1 }}>
-            <T variant="heading">{stock?.name || item.ticker}</T>
-            <T variant="caption" muted>
-              {item.ticker}
-              {stock?.exchange ? ` · ${stock.exchange}` : ''}
-            </T>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <T variant="heading">{quote ? money(quote.price) : '—'}</T>
-            {change !== null ? (
-              <T variant="caption" muted>
-                {signedPct(change)} vs previous close
-              </T>
-            ) : null}
-          </View>
+    <View style={{ gap: space.md }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${item.ticker}`}
+        onPress={onOpen}
+        style={{ gap: space.md }}>
+        <View>
+          <T variant="heading">{stock?.name || item.ticker}</T>
+          <T variant="caption" muted>
+            {item.ticker}
+            {stock?.exchange ? ` · ${stock.exchange}` : ''}
+          </T>
         </View>
+        <StockGraph
+          price={quote?.price ?? null}
+          previousClose={quote?.previousClose}
+          points={chartSeries(rt.market.closes[item.ticker], quote)}
+        />
         <T variant="caption" muted>
           {priceLine}
         </T>
@@ -107,7 +107,7 @@ function MatchCard({ item, onOpen }: { item: RecommendationVM; onOpen: () => voi
           ))}
         </View>
       ) : null}
-    </Card>
+    </View>
   );
 }
 

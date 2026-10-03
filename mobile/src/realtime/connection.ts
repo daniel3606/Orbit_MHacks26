@@ -212,6 +212,8 @@ export type MarketVM = {
   error: string | null;
   stocks: StockVM[];
   quotes: Record<string, QuoteVM>;
+  /** Recent session closes, oldest first, keyed by ticker. */
+  closes: Record<string, { sessionDate: string; close: number }[]>;
   signals: Record<string, SignalVM>;
   generation: GenerationVM | null;
   capabilities: CapabilityVM[];
@@ -223,6 +225,7 @@ const EMPTY_MARKET: MarketVM = {
   error: null,
   stocks: [],
   quotes: {},
+  closes: {},
   signals: {},
   generation: null,
   capabilities: [],
@@ -671,6 +674,15 @@ class ConnectionManager {
         source: q.source,
       };
     }
+    const closes: Record<string, { sessionDate: string; close: number }[]> = {};
+    for (const row of conn.db.marketCloses.iter()) {
+      const list = closes[row.ticker] ?? [];
+      list.push({ sessionDate: row.sessionDate, close: micros(row.closeMicros) });
+      closes[row.ticker] = list;
+    }
+    for (const list of Object.values(closes)) {
+      list.sort((a, b) => (a.sessionDate < b.sessionDate ? -1 : a.sessionDate > b.sessionDate ? 1 : 0));
+    }
     const signals: Record<string, SignalVM> = {};
     for (const s of conn.db.trendSignal.iter()) {
       signals[s.ticker] = {
@@ -717,6 +729,7 @@ class ConnectionManager {
         }))
         .sort((a, b) => a.displayOrder - b.displayOrder),
       quotes,
+      closes,
       signals,
       generation: g
         ? {
@@ -740,7 +753,7 @@ class ConnectionManager {
     };
   }
 
-  /** Screen-scoped subscription to shared market projections (never the history tables). */
+  /** Screen-scoped subscription to shared market projections, including recent closes. */
   private subscribeMarket(conn: DbConnection, isCurrent: () => boolean) {
     if (this.marketHandle?.isActive()) return;
     this.patch({ market: { ...this.snapshot.market, subscribed: true, applied: false, error: null } });
@@ -755,7 +768,14 @@ class ConnectionManager {
         if (!isCurrent()) return;
         this.patch({ market: { ...this.snapshot.market, error: ctx.event?.message ?? 'subscription_failed' } });
       })
-      .subscribe([tables.stock, tables.marketQuote, tables.trendSignal, tables.marketGeneration, tables.providerCapability]);
+      .subscribe([
+        tables.stock,
+        tables.marketQuote,
+        tables.trendSignal,
+        tables.marketGeneration,
+        tables.providerCapability,
+        tables.marketCloses,
+      ]);
   }
 
   /** Call when a market screen gains focus; returns the release function. */

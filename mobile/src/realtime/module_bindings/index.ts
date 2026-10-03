@@ -61,6 +61,7 @@ import UpsertStocksReducer from "./upsert_stocks_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import MarketClosesRow from "./market_closes_table";
 import MarketGenerationRow from "./market_generation_table";
 import MarketQuoteRow from "./market_quote_table";
 import MyAccountRow from "./my_account_table";
@@ -145,6 +146,13 @@ const tablesSchema = __schema({
       { name: 'trend_signal_ticker_key', constraint: 'unique', columns: ['ticker'] },
     ],
   }, TrendSignalRow),
+  marketCloses: __table({
+    name: 'market_closes',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MarketClosesRow),
   myAccount: __table({
     name: 'my_account',
     indexes: [

@@ -91,6 +91,17 @@ export const Job = __t.object("Job", {
 });
 export type Job = __Infer<typeof Job>;
 
+export const MarketClose = __t.object("MarketClose", {
+  id: __t.u64(),
+  ticker: __t.string(),
+  sessionDate: __t.string(),
+  closeMicros: __t.i64(),
+});
+export type MarketClose = __Infer<typeof MarketClose>;
+
+export const MarketCloses = __t.object("MarketCloses", {});
+export type MarketCloses = __Infer<typeof MarketCloses>;
+
 export const MarketGeneration = __t.object("MarketGeneration", {
   scope: __t.string(),
   generation: __t.u64(),

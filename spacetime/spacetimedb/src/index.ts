@@ -38,6 +38,7 @@ export {
   myPaperOrders,
   myServiceGrant,
   workerJobs,
+  marketCloses,
   workerDailyBars,
   workerJobProfiles,
   workerPaperOrders,
