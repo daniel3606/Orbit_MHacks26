@@ -302,6 +302,52 @@ describe('versioned snapshot publication', () => {
   });
 });
 
+describe('Alpaca history source', () => {
+  test('split-adjusted SIP bars are accepted and an unknown feed is not', async () => {
+    const job = await lease(svc);
+    const generation = nowMicros();
+    await svc.conn.reducers.publishMarketSnapshot(
+      snapshot(job.jobId, job.attempt, generation, {
+        bars: [
+          {
+            ticker: 'AAA',
+            sessionDate: '2026-10-01',
+            openMicros: 100_000_000n,
+            highMicros: 101_000_000n,
+            lowMicros: 99_000_000n,
+            closeMicros: 100_500_000n,
+            volume: 8_000_000n,
+            adjusted: true,
+            source: 'alpaca_sip',
+          },
+        ],
+      })
+    );
+    const rejected = await lease(svc);
+    await rejectsWith(
+      svc.conn.reducers.publishMarketSnapshot(
+        snapshot(rejected.jobId, rejected.attempt, nowMicros(), {
+          bars: [
+            {
+              ticker: 'AAA',
+              sessionDate: '2026-09-30',
+              openMicros: undefined,
+              highMicros: undefined,
+              lowMicros: undefined,
+              closeMicros: 100_000_000n,
+              volume: 1n,
+              adjusted: true,
+              source: 'alpaca_mixed',
+            },
+          ],
+        })
+      ),
+      'invalid_source'
+    );
+    await release(svc, rejected);
+  });
+});
+
 describe('Python worker → SpacetimeDB → subscribed client', () => {
   test('a real ingestion run (fixture provider) is delivered to a subscribed consumer', async () => {
     const pySvc = await connect();

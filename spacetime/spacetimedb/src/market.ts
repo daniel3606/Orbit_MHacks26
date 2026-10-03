@@ -15,7 +15,14 @@ export const FEATURE_NAMES = [
 ] as const;
 const SIGNAL_STATUSES = ['published', 'insufficient_data'] as const;
 /** Higher rank wins when two sources cover the same session. */
-const BAR_SOURCE_RANK: Record<string, number> = { fixture: 1, finnhub_quote: 2, finnhub_candle: 3 };
+/** Equal Alpaca ranks may replace each other; signal code never mixes the two feeds. */
+const BAR_SOURCE_RANK: Record<string, number> = {
+  fixture: 1,
+  finnhub_quote: 2,
+  finnhub_candle: 3,
+  alpaca_iex: 4,
+  alpaca_sip: 4,
+};
 const QUOTE_SOURCES = ['finnhub', 'fixture'];
 const FIXTURE_FLAG = 'allow_fixture_data';
 const MAX_BARS_PER_TICKER = 400;

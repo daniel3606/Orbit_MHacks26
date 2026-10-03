@@ -82,7 +82,7 @@ Do not display invented match percentages. If a 0–100 fit score is shown, labe
 | Intelligence/API | FastAPI, Python | Market ingestion, classification orchestration, scoring, explanations, Alpaca integration |
 | Background work | Python worker, shared backend code | Durable jobs, periodic ingestion, retries, reconciliation |
 | Authentication | SpacetimeAuth/OIDC, subject to device validation | Stable user identity and authenticated service access |
-| Market data | Finnhub through provider abstraction | Quotes, historical data, news, supported reference data |
+| Market data | Finnhub for quotes, profiles, exchange status, and holidays; Alpaca Market Data for historical daily bars | Quotes stay separate from daily history. Alpaca data uses `data.alpaca.markets` only and does not enable trading |
 | Semantic classification | Jev behind adapter | Structured news/event judgments |
 | Communication | OpenAI through adapter | Grounded summaries and conversation |
 | Execution | Alpaca Paper Trading through adapter | External simulated orders and account state |
@@ -90,7 +90,7 @@ Do not display invented match percentages. If a 0–100 fit score is shown, labe
 
 Supabase Postgres and Supabase Auth are removed from the default architecture. Do not maintain duplicate authoritative user-state databases.
 
-**Responsibility contract:** Finnhub supplies facts; Jev classifies text; Python computes financial features and rankings; OpenAI explains; Alpaca owns its paper execution results; SpacetimeDB persists and synchronizes Orbit application state.
+**Responsibility contract:** Finnhub supplies quotes and exchange reference data; Alpaca Market Data supplies historical daily bars; Jev classifies text; Python computes financial features and rankings; OpenAI explains; Alpaca Paper owns its paper execution results; SpacetimeDB persists and synchronizes Orbit application state. Historical market data and paper trading use separate hosts.
 
 ## 5. System architecture
 
@@ -187,11 +187,13 @@ Use configurable attempt limits and exponential backoff with jitter. Expired lea
 
 ## 10. Market-data ingestion
 
-FastAPI/backend workers own all Finnhub communication. Mobile does not call market or AI providers directly.
+FastAPI/backend workers own all market-data communication. Mobile does not call market or AI providers directly.
 
-Required inputs: recent quote, adjusted historical closes/volume where available, company news, and market/sector benchmarks where supported.
+Finnhub remains the quote, profile, and exchange-calendar source. Historical daily OHLCV comes from Alpaca Market Data (`data.alpaca.markets`), approved on 2026-10-03 because the configured Finnhub plan returns HTTP 403 for daily candles. That data host is separate from Alpaca paper trading (`paper-api.alpaca.markets`) and cannot submit orders. Prefer consolidated SIP history. If only IEX is available, record that its volume is not consolidated market volume and do not mix the two feeds.
 
-The provider adapter reports capabilities and unavailable fields. Verify the actual Finnhub subscription includes required history, news retention, benchmark data, and quote delivery. Do not promise paid-tier data through a free key.
+Required inputs: recent quote, split-adjusted historical closes and volume where available, company news, and market/sector benchmarks where supported.
+
+The provider adapter reports capabilities and unavailable fields. Verify the actual Finnhub subscription for quotes, news retention, and reference data, and verify which Alpaca history feed the account can read. Do not promise paid-tier data through a free key.
 
 Store timestamps separately: provider event time, ingestion time, computation time, and publication time. Use UTC in storage; format for the user's timezone in UI. Preserve exchange calendar semantics for daily bars.
 
@@ -342,9 +344,9 @@ RecommendationRank = 0.60*TrendScore + 0.40*FitScore
 
 Fit components range from 0 to 1. Keep Trend Score, Fit Score, and rank distinct internally and on a compatible 0–100 scale before combining.
 
-Python owns a versioned rubric: risk thresholds based on realized volatility/drawdown and supported metrics; horizon/style matching based on an explicit stock-metadata rubric; sector preference from user input. Missing fundamentals must not turn into invented value/income classifications. Mark affected components unavailable and use a documented coverage rule.
+`fit-v1.0.0` (2026-10-03) scores only the components the stored data can support. Risk match uses 20-session realized volatility and up to 60 sessions of peak-to-trough drawdown from the same daily-bar source as the Trend Score. Sector preference uses the saved interests and the stock’s universe sector. Horizon match and style match stay in the formula with their original weights, but they are marked unavailable: daily momentum is not treated as long-term suitability, and no valuation, dividend, or growth fundamentals are stored, so stocks are not labeled growth, value, or income. Experience and goal change explanation wording only. Available weights are renormalized and coverage keeps the sum of the original available weights (0.50 when risk and sector are both scored, 0.10 when the user set no volatility ceiling). Zodiac is not an input.
 
-Apply supported-symbol, data-quality, and risk-eligibility filters before ranking. High trend must not override an explicit risk constraint. Break ties deterministically by fit, data freshness, then ticker. Prefer sector variety among the top three when it does not violate constraints.
+Apply supported-symbol, data-quality, and risk-eligibility filters before ranking. High trend must not override an explicit risk constraint. Conservative and moderate profiles exclude names above a documented volatility ceiling or drawdown floor; aggressive sets no ceiling and does not treat higher recent volatility as a better match. Break ties deterministically by fit, data freshness, then ticker. Prefer sector variety among the top three when it does not violate constraints and the rank gap stays within 15 points.
 
 For agent requests involving portfolio concentration, read current holdings and apply an explicit configurable exposure rule. If no acceptable candidates exist, explain that instead of relaxing constraints silently.
 

@@ -47,6 +47,15 @@ export const DailyBar = __t.object("DailyBar", {
 });
 export type DailyBar = __Infer<typeof DailyBar>;
 
+export const FitComponent = __t.object("FitComponent", {
+  name: __t.string(),
+  available: __t.bool(),
+  value: __t.option(__t.f64()),
+  weight: __t.f64(),
+  reason: __t.option(__t.string()),
+});
+export type FitComponent = __Infer<typeof FitComponent>;
+
 export const InvestmentProfile = __t.object("InvestmentProfile", {
   owner: __t.identity(),
   schemaVersion: __t.u16(),
@@ -136,11 +145,105 @@ export type MyBranding = __Infer<typeof MyBranding>;
 export const MyJobs = __t.object("MyJobs", {});
 export type MyJobs = __Infer<typeof MyJobs>;
 
+export const MyPaperAccess = __t.object("MyPaperAccess", {});
+export type MyPaperAccess = __Infer<typeof MyPaperAccess>;
+
+export const MyPaperAccount = __t.object("MyPaperAccount", {});
+export type MyPaperAccount = __Infer<typeof MyPaperAccount>;
+
+export const MyPaperOrders = __t.object("MyPaperOrders", {});
+export type MyPaperOrders = __Infer<typeof MyPaperOrders>;
+
+export const MyPaperPositions = __t.object("MyPaperPositions", {});
+export type MyPaperPositions = __Infer<typeof MyPaperPositions>;
+
 export const MyProfile = __t.object("MyProfile", {});
 export type MyProfile = __Infer<typeof MyProfile>;
 
+export const MyRecommendationGeneration = __t.object("MyRecommendationGeneration", {});
+export type MyRecommendationGeneration = __Infer<typeof MyRecommendationGeneration>;
+
+export const MyRecommendations = __t.object("MyRecommendations", {});
+export type MyRecommendations = __Infer<typeof MyRecommendations>;
+
 export const MyServiceGrant = __t.object("MyServiceGrant", {});
 export type MyServiceGrant = __Infer<typeof MyServiceGrant>;
+
+export const PaperAccount = __t.object("PaperAccount", {
+  owner: __t.identity(),
+  providerAccountId: __t.string(),
+  cashMicros: __t.i64(),
+  equityMicros: __t.i64(),
+  buyingPowerMicros: __t.i64(),
+  currency: __t.string(),
+  revision: __t.u64(),
+  providerTime: __t.timestamp(),
+  syncedAt: __t.timestamp(),
+  marketOpen: __t.bool(),
+  nextOpen: __t.option(__t.timestamp()),
+  nextClose: __t.option(__t.timestamp()),
+});
+export type PaperAccount = __Infer<typeof PaperAccount>;
+
+export const PaperBinding = __t.object("PaperBinding", {
+  slot: __t.string(),
+  owner: __t.identity(),
+  providerAccountId: __t.string(),
+  boundAt: __t.timestamp(),
+});
+export type PaperBinding = __Infer<typeof PaperBinding>;
+
+export const PaperOrder = __t.object("PaperOrder", {
+  orderId: __t.u64(),
+  owner: __t.identity(),
+  clientOrderKey: __t.string(),
+  ticker: __t.string(),
+  side: __t.string(),
+  quantityMicros: __t.option(__t.i64()),
+  notionalMicros: __t.option(__t.i64()),
+  quoteMicros: __t.i64(),
+  quoteTime: __t.timestamp(),
+  status: __t.string(),
+  providerOrderId: __t.option(__t.string()),
+  filledQuantityMicros: __t.i64(),
+  filledAvgPriceMicros: __t.option(__t.i64()),
+  rejectReason: __t.option(__t.string()),
+  revision: __t.u64(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type PaperOrder = __Infer<typeof PaperOrder>;
+
+export const PaperOrderUpdate = __t.object("PaperOrderUpdate", {
+  clientOrderKey: __t.string(),
+  status: __t.string(),
+  providerOrderId: __t.option(__t.string()),
+  filledQuantityMicros: __t.i64(),
+  filledAvgPriceMicros: __t.option(__t.i64()),
+  rejectReason: __t.option(__t.string()),
+});
+export type PaperOrderUpdate = __Infer<typeof PaperOrderUpdate>;
+
+export const PaperPosition = __t.object("PaperPosition", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  ticker: __t.string(),
+  quantityMicros: __t.i64(),
+  avgEntryMicros: __t.i64(),
+  marketValueMicros: __t.option(__t.i64()),
+  unrealizedPlMicros: __t.option(__t.i64()),
+  revision: __t.u64(),
+});
+export type PaperPosition = __Infer<typeof PaperPosition>;
+
+export const PaperPositionInput = __t.object("PaperPositionInput", {
+  ticker: __t.string(),
+  quantityMicros: __t.i64(),
+  avgEntryMicros: __t.i64(),
+  marketValueMicros: __t.option(__t.i64()),
+  unrealizedPlMicros: __t.option(__t.i64()),
+});
+export type PaperPositionInput = __Infer<typeof PaperPositionInput>;
 
 export const ProfileBranding = __t.object("ProfileBranding", {
   owner: __t.identity(),
@@ -171,6 +274,81 @@ export const QuoteInput = __t.object("QuoteInput", {
   source: __t.string(),
 });
 export type QuoteInput = __Infer<typeof QuoteInput>;
+
+export const Recommendation = __t.object("Recommendation", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  generation: __t.u64(),
+  ticker: __t.string(),
+  displayRank: __t.u16(),
+  trendScore: __t.f64(),
+  fitScore: __t.f64(),
+  recommendationRank: __t.f64(),
+  fitCoverage: __t.f64(),
+  get components() {
+    return __t.array(FitComponent);
+  },
+  realizedVol: __t.option(__t.f64()),
+  maxDrawdown: __t.option(__t.f64()),
+  volSessions: __t.u32(),
+  drawdownSessions: __t.u32(),
+  sector: __t.string(),
+  benchmark: __t.string(),
+  sessionDate: __t.string(),
+  historySource: __t.string(),
+  matchReason: __t.string(),
+  marketActivity: __t.string(),
+  riskObservation: __t.string(),
+  learningNote: __t.string(),
+  limitations: __t.array(__t.string()),
+});
+export type Recommendation = __Infer<typeof Recommendation>;
+
+export const RecommendationGeneration = __t.object("RecommendationGeneration", {
+  owner: __t.identity(),
+  generation: __t.u64(),
+  jobId: __t.u64(),
+  status: __t.string(),
+  profileVersion: __t.u32(),
+  profileSchemaVersion: __t.u16(),
+  marketGeneration: __t.u64(),
+  signalAlgorithmVersion: __t.string(),
+  fitAlgorithmVersion: __t.string(),
+  signalSessionDate: __t.string(),
+  consideredCount: __t.u16(),
+  eligibleCount: __t.u16(),
+  publishedCount: __t.u16(),
+  summary: __t.string(),
+  limitations: __t.array(__t.string()),
+  publishedAt: __t.timestamp(),
+});
+export type RecommendationGeneration = __Infer<typeof RecommendationGeneration>;
+
+export const RecommendationInput = __t.object("RecommendationInput", {
+  ticker: __t.string(),
+  displayRank: __t.u16(),
+  trendScore: __t.f64(),
+  fitScore: __t.f64(),
+  recommendationRank: __t.f64(),
+  fitCoverage: __t.f64(),
+  get components() {
+    return __t.array(FitComponent);
+  },
+  realizedVol: __t.option(__t.f64()),
+  maxDrawdown: __t.option(__t.f64()),
+  volSessions: __t.u32(),
+  drawdownSessions: __t.u32(),
+  sector: __t.string(),
+  benchmark: __t.string(),
+  sessionDate: __t.string(),
+  historySource: __t.string(),
+  matchReason: __t.string(),
+  marketActivity: __t.string(),
+  riskObservation: __t.string(),
+  learningNote: __t.string(),
+  limitations: __t.array(__t.string()),
+});
+export type RecommendationInput = __Infer<typeof RecommendationInput>;
 
 export const ServiceConfig = __t.object("ServiceConfig", {
   key: __t.string(),
@@ -306,6 +484,12 @@ export type WorkerJobProfiles = __Infer<typeof WorkerJobProfiles>;
 
 export const WorkerJobs = __t.object("WorkerJobs", {});
 export type WorkerJobs = __Infer<typeof WorkerJobs>;
+
+export const WorkerPaperAccount = __t.object("WorkerPaperAccount", {});
+export type WorkerPaperAccount = __Infer<typeof WorkerPaperAccount>;
+
+export const WorkerPaperOrders = __t.object("WorkerPaperOrders", {});
+export type WorkerPaperOrders = __Infer<typeof WorkerPaperOrders>;
 
 export const WorkerRegistration = __t.object("WorkerRegistration", {
   identity: __t.identity(),

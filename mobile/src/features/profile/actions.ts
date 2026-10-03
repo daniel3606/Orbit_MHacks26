@@ -1,3 +1,5 @@
+import { Timestamp } from 'spacetimedb';
+
 import { realtime } from '@/realtime/connection';
 import type { ValidDraft } from '@/state/onboarding-draft';
 
@@ -8,6 +10,36 @@ export function completeOnboarding(value: ValidDraft) {
 
 export function updatePreferences(expectedVersion: number, value: ValidDraft) {
   return realtime.call(conn => conn.reducers.updatePreferences({ expectedVersion, ...value }));
+}
+
+export function requestRecommendations() {
+  return realtime.call(conn => conn.reducers.requestRecommendations({}));
+}
+
+export function requestPaperSync() {
+  return realtime.call(conn => conn.reducers.requestPaperSync({}));
+}
+
+export function createPaperOrder(input: {
+  ticker: string;
+  side: 'buy' | 'sell';
+  quantityMicros?: bigint;
+  notionalMicros?: bigint;
+  clientOrderKey: string;
+  quoteMicros: bigint;
+  quoteTime: Date;
+}) {
+  return realtime.call(conn =>
+    conn.reducers.createPaperOrderIntent({
+      ticker: input.ticker,
+      side: input.side,
+      quantityMicros: input.quantityMicros,
+      notionalMicros: input.notionalMicros,
+      clientOrderKey: input.clientOrderKey,
+      quoteMicros: input.quoteMicros,
+      quoteTime: new Timestamp(BigInt(input.quoteTime.getTime()) * 1000n),
+    })
+  );
 }
 
 export function requestBackendCheck(): Promise<string> {

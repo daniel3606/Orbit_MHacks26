@@ -4,9 +4,12 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import {
   ago,
+  explainNote,
   explainReason,
   FEATURE_LABELS,
+  historyFeed,
   money,
+  providerLabel,
   sessionLabel,
   signedPct,
   signedPoints,
@@ -39,8 +42,9 @@ export default function MarketScreen() {
 
   const equities = m.stocks.filter(s => s.kind === 'equity');
   const benchmarks = m.stocks.filter(s => s.kind === 'benchmark');
-  const missingCaps = m.capabilities.filter(c => !c.available);
   const generation = m.generation;
+  const feed = historyFeed(m.capabilities);
+  const [details, setDetails] = useState(false);
   const stale = generation ? now - generation.publishedAt.getTime() > STALE_AFTER_MS : false;
   const loading = m.subscribed && !m.applied && equities.length === 0;
 
@@ -79,10 +83,7 @@ export default function MarketScreen() {
           </T>
           <Row label="Last completed session" value={sessionLabel(generation.lastCompletedSession)} />
           <Row label="Status checked" value={stamp(generation.marketStatusAt)} />
-          <Row
-            label="Published"
-            value={`${stamp(generation.publishedAt)} · ${generation.provider === 'finnhub' ? 'Finnhub' : generation.provider}`}
-          />
+          <Row label="Published" value={`${stamp(generation.publishedAt)} · ${providerLabel(generation.provider)}`} />
           {!generation.marketOpen ? (
             <T variant="caption" muted>
               Prices below are the latest available from the provider, with their own timestamps. They do not change
@@ -100,16 +101,49 @@ export default function MarketScreen() {
         />
       ) : null}
 
-      {missingCaps.length > 0 ? (
+      {generation ? (
         <Card>
-          <T variant="heading">Data limits</T>
-          {missingCaps.map(c => (
-            <Row key={c.key} label={c.capability} value="Not in current plan" />
-          ))}
-          {missingCaps.some(c => c.key.endsWith('.daily_candles')) ? (
+          <T variant="heading">What you can see</T>
+          <T muted>Prices are the latest Finnhub quotes, shown with the time Finnhub reported.</T>
+          {feed === 'sip' ? (
+            <T muted>
+              Trend Scores use completed daily prices and full US market volume, adjusted for stock splits. News is
+              not included yet. Each stock shows the date its score uses.
+            </T>
+          ) : null}
+          {feed === 'iex' ? (
+            <T muted>
+              Trend Scores use completed daily prices adjusted for stock splits. Volume counts only the IEX exchange,
+              not the whole US market. News is not included yet.
+            </T>
+          ) : null}
+          {feed === 'none' ? (
+            <T muted>
+              Daily price and volume history is not available, so Trend Scores stay hidden instead of being estimated.
+            </T>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: details }}
+            onPress={() => setDetails(v => !v)}
+            style={{ minHeight: 44, justifyContent: 'center' }}>
+            <T variant="label" color={colors.accent}>
+              {details ? 'Hide data details' : 'Data details'}
+            </T>
+          </Pressable>
+          {details
+            ? m.capabilities.map(c => (
+                <View key={c.key} style={{ gap: space.xs }}>
+                  <Row label={c.capability} value={c.available ? 'Available' : 'Unavailable'} />
+                  <T variant="caption" muted>
+                    {c.detail}
+                  </T>
+                </View>
+              ))
+            : null}
+          {details && generation ? (
             <T variant="caption" muted>
-              Without daily price history, signals that need 20+ completed sessions of prices and volume are marked
-              unavailable instead of estimated. History builds slowly from daily closing prices (no volume).
+              {generation.algorithmVersion}
             </T>
           ) : null}
         </Card>
@@ -192,18 +226,31 @@ function StockRow({ stock, quote, signal }: { stock: StockVM; quote?: QuoteVM; s
 
         {signal && !published ? (
           <T variant="caption" muted>
-            {signal.historySessions} of {signal.requiredSessions} sessions of history · price/volume coverage{' '}
-            {signal.coverage.toFixed(2)} (needs 0.55)
+            Not enough completed daily history to score this stock yet.
           </T>
         ) : null}
         {published ? (
           <T variant="caption" muted>
-            Based on price and volume only (coverage {signal!.coverage.toFixed(2)}). Not a probability of gains.
+            Through {sessionLabel(signal!.sessionDate)}, compared with {signal!.benchmark}. A heuristic from price and
+            volume, not a probability of gains.
           </T>
         ) : null}
 
         {open && signal ? (
           <View style={{ gap: space.xs, paddingTop: space.sm }}>
+            <T variant="label">Diagnostics</T>
+            <T variant="caption" muted>
+              {signal.historySessions} completed sessions ({signal.requiredSessions} needed). Price and volume coverage{' '}
+              {signal.coverage.toFixed(2)} (needs 0.55). Score date {sessionLabel(signal.sessionDate)}.
+            </T>
+            {signal.notes.map(note => {
+              const text = explainNote(note);
+              return text ? (
+                <T key={note} variant="caption" muted>
+                  {text}
+                </T>
+              ) : null;
+            })}
             {signal.features.map(f => (
               <View key={f.name} style={{ paddingVertical: space.xs }}>
                 <T variant="label" color={f.available ? colors.text : colors.textMuted}>

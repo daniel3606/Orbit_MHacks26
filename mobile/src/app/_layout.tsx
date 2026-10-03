@@ -52,6 +52,7 @@ export default function RootLayout() {
             name="edit-preferences"
             options={{ presentation: 'modal', headerShown: true, title: 'Edit preferences' }}
           />
+          <Stack.Screen name="stock/[ticker]" options={{ headerShown: true, title: 'Stock' }} />
         </Stack.Protected>
         <Stack.Protected guard={!hasProfile}>
           <Stack.Screen name="onboarding" />

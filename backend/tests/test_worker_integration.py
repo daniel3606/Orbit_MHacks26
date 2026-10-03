@@ -96,7 +96,8 @@ async def test_enqueue_claim_complete_round_trip(actors):
     (again,) = [j for j in await user.my_jobs() if j.request_key == key]
     assert again.result_ref == done.result_ref and again.updated_at == done.updated_at
 
-    # refresh_recommendations has no handler yet (Phase 4) and must stay queued, not faked.
+    # refresh_recommendations is a real handler, but this worker did not register
+    # that kind, so the onboarding job must stay queued rather than be claimed here.
     refresh = [j for j in await user.my_jobs() if j.kind == "refresh_recommendations"]
     assert len(refresh) == 1 and refresh[0].status == "queued"
 

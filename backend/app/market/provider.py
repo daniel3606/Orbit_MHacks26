@@ -18,6 +18,7 @@ class CapabilityResult:
     capability: str
     available: bool
     detail: str
+    provider: str = ""
 
 
 @dataclass(frozen=True)
@@ -44,8 +45,8 @@ class DailyBar:
     high: Decimal | None
     low: Decimal | None
     volume: int | None
-    adjusted: bool  # split-adjusted series
-    source: str  # "finnhub_candle" | "finnhub_quote" | "fixture"
+    adjusted: bool  # split-adjusted prices and volume; not dividend-adjusted
+    source: str  # "finnhub_candle" | "finnhub_quote" | "alpaca_sip" | "alpaca_iex" | "fixture"
 
 
 @dataclass(frozen=True)

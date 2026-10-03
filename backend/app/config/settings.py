@@ -14,6 +14,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 ALPACA_PAPER_URL = "https://paper-api.alpaca.markets"
+# Market-data host only. Never a trading host: historical bars must not be
+# able to submit or enable live orders (PRD §17, §24).
+ALPACA_DATA_URL = "https://data.alpaca.markets"
 
 
 class Settings(BaseSettings):
@@ -55,7 +58,14 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     alpaca_api_key_id: SecretStr | None = None
     alpaca_api_secret_key: SecretStr | None = None
+    # Paper trading only. Historical bars use alpaca_data_base_url instead.
     alpaca_base_url: AnyHttpUrl = AnyHttpUrl(ALPACA_PAPER_URL)
+    alpaca_data_base_url: AnyHttpUrl = AnyHttpUrl(ALPACA_DATA_URL)
+    # Probed limit on this account is 200/min (X-RateLimit-Limit). Stay under it.
+    alpaca_data_calls_per_minute: int = Field(default=150, ge=1, le=200)
+    alpaca_data_burst: int = Field(default=10, ge=1, le=30)
+    # The one identity allowed to use the paper account. Unset means paper jobs are not registered.
+    paper_demo_identity: str | None = None
 
     @field_validator("alpaca_base_url")
     @classmethod
@@ -64,6 +74,24 @@ class Settings(BaseSettings):
         if value.host != "paper-api.alpaca.markets":
             raise ValueError("Only the Alpaca paper endpoint is allowed")
         return value
+
+    @field_validator("alpaca_data_base_url")
+    @classmethod
+    def data_host_only(cls, value: AnyHttpUrl) -> AnyHttpUrl:
+        # Reject trading hosts so a mis-set URL cannot place orders.
+        if value.host != "data.alpaca.markets":
+            raise ValueError("Alpaca historical data must use data.alpaca.markets")
+        return value
+
+    @field_validator("paper_demo_identity")
+    @classmethod
+    def demo_identity(cls, value: str | None) -> str | None:
+        if value is None or value.strip() == "":
+            return None
+        hex_value = value.strip().removeprefix("0x").lower()
+        if len(hex_value) != 64 or any(c not in "0123456789abcdef" for c in hex_value):
+            raise ValueError("PAPER_DEMO_IDENTITY must be 64 hex characters")
+        return hex_value
 
     @model_validator(mode="after")
     def alpaca_pair(self) -> "Settings":

@@ -20,9 +20,12 @@ from app.state.dto import (
     JobV1,
     MarketGenerationV1,
     MarketQuoteV1,
+    PaperAccountV1,
+    PaperOrderV1,
     ProviderCapabilityV1,
     ServiceGrantV1,
     StockV1,
+    TrendSignalV1,
 )
 from app.state.sats_json import SatsDecodeError, decode_result_set
 
@@ -197,8 +200,27 @@ class SpacetimeGateway:
     async def publish_provider_capabilities(self, capabilities: Sequence[dict[str, Any]]) -> None:
         await self.call_reducer("publish_provider_capabilities", [list(capabilities)])
 
+    async def trend_signals(self) -> list[TrendSignalV1]:
+        return self._parse(TrendSignalV1, await self._view("trend_signal"))
+
+    async def publish_recommendations(self, args: Sequence[Any]) -> None:
+        await self.call_reducer("publish_recommendations", list(args))
+
     async def request_market_ingest(self) -> None:
         await self.call_reducer("request_market_ingest", [])
 
     async def publish_market_snapshot(self, args: Sequence[Any]) -> None:
         await self.call_reducer("publish_market_snapshot", list(args))
+
+    async def worker_paper_orders(self) -> list[PaperOrderV1]:
+        return self._parse(PaperOrderV1, await self._view("worker_paper_orders"))
+
+    async def worker_paper_account(self) -> PaperAccountV1 | None:
+        rows = self._parse(PaperAccountV1, await self._view("worker_paper_account"))
+        return rows[0] if rows else None
+
+    async def apply_paper_snapshot(self, args: Sequence[Any]) -> None:
+        await self.call_reducer("apply_paper_snapshot", list(args))
+
+    async def request_paper_reconcile(self) -> None:
+        await self.call_reducer("request_paper_reconcile", [])

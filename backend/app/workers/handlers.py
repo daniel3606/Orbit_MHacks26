@@ -1,10 +1,6 @@
-"""Job handlers. Only kinds registered here are claimed; others stay queued.
+"""Job handlers. Kinds registered here are the ones a worker may claim."""
 
-`refresh_recommendations` is intentionally not registered yet: ranking is
-PRD Phase 4 and must not be faked. Those jobs remain queued (coalesced to one
-per user) until a real handler exists.
-"""
-
+from app.ranking.refresh import RefreshRecommendationsHandler
 from app.state.dto import JobV1
 from app.state.gateway import SpacetimeGateway
 from app.workers.runner import JobFailure, JobHandler
@@ -31,5 +27,6 @@ class BackendCheckHandler:
 
 
 def default_handlers(worker_id: str) -> dict[str, JobHandler]:
-    handler = BackendCheckHandler(worker_id)
-    return {handler.kind: handler}
+    check = BackendCheckHandler(worker_id)
+    refresh = RefreshRecommendationsHandler()
+    return {check.kind: check, refresh.kind: refresh}

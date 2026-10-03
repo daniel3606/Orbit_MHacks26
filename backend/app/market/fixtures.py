@@ -40,12 +40,15 @@ class FixtureProvider:
 
     async def capabilities(self) -> list[CapabilityResult]:
         return [
-            CapabilityResult("fixture.quote", "Latest quote with timestamp", True, "Synthetic test fixture"),
-            CapabilityResult("fixture.daily_candles", "Daily historical OHLCV", True, "Synthetic test fixture"),
+            CapabilityResult("fixture.quote", "Latest quote with timestamp", True, "Synthetic test fixture", "fixture"),
+            CapabilityResult("fixture.daily_candles", "Daily historical OHLCV", True, "Synthetic test fixture", "fixture"),
         ]
 
     async def has(self, key: str) -> bool:
         return key in ("quote", "daily_candles")
+
+    async def history_source(self) -> str | None:
+        return "fixture"
 
     async def get_quote(self, ticker: str) -> Quote:
         bars = self._bars[ticker]

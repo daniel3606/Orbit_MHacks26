@@ -284,6 +284,153 @@ export const providerCapability = table(
   }
 );
 
+/**
+ * Fit components stored with each recommendation. `weight` is the rubric's
+ * original weight. Unavailable components stay in the row so coverage can be
+ * shown; they are not treated as a match.
+ */
+export const FitComponent = t.object('FitComponent', {
+  name: t.string(),
+  available: t.bool(),
+  value: t.option(t.f64()),
+  weight: t.f64(),
+  reason: t.option(t.string()),
+});
+
+/**
+ * The caller's current recommendation generation. The previous rows stay
+ * readable until a newer publish commits in the same transaction.
+ */
+export const recommendationGeneration = table(
+  { name: 'recommendation_generation' },
+  {
+    owner: t.identity().primaryKey(),
+    generation: t.u64(),
+    jobId: t.u64(),
+    status: t.string(), // 'ready' | 'no_eligible' | 'insufficient_market'
+    profileVersion: t.u32(),
+    profileSchemaVersion: t.u16(),
+    marketGeneration: t.u64(),
+    signalAlgorithmVersion: t.string(),
+    fitAlgorithmVersion: t.string(),
+    signalSessionDate: t.string(),
+    consideredCount: t.u16(),
+    eligibleCount: t.u16(),
+    publishedCount: t.u16(),
+    summary: t.string(),
+    limitations: t.array(t.string()),
+    publishedAt: t.timestamp(),
+  }
+);
+
+/** One row per recommended ticker in a generation. Private; caller view only. */
+export const recommendation = table(
+  {
+    name: 'recommendation',
+    indexes: [{ accessor: 'by_owner_generation', algorithm: 'btree', columns: ['owner', 'generation'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity().index('btree'),
+    generation: t.u64(),
+    ticker: t.string(),
+    displayRank: t.u16(),
+    trendScore: t.f64(),
+    fitScore: t.f64(),
+    recommendationRank: t.f64(),
+    fitCoverage: t.f64(),
+    components: t.array(FitComponent),
+    realizedVol: t.option(t.f64()),
+    maxDrawdown: t.option(t.f64()),
+    volSessions: t.u32(),
+    drawdownSessions: t.u32(),
+    sector: t.string(),
+    benchmark: t.string(),
+    sessionDate: t.string(),
+    historySource: t.string(),
+    matchReason: t.string(),
+    marketActivity: t.string(),
+    riskObservation: t.string(),
+    learningNote: t.string(),
+    limitations: t.array(t.string()),
+  }
+);
+
+/** One explicit paper-account binding. Not created on connect. */
+export const paperBinding = table(
+  { name: 'paper_binding' },
+  {
+    slot: t.string().primaryKey(),
+    owner: t.identity(),
+    providerAccountId: t.string(),
+    boundAt: t.timestamp(),
+  }
+);
+
+/** Latest Alpaca paper account snapshot for the bound owner. Money is micro-units (1e-6). */
+export const paperAccount = table(
+  { name: 'paper_account' },
+  {
+    owner: t.identity().primaryKey(),
+    providerAccountId: t.string(),
+    cashMicros: t.i64(),
+    equityMicros: t.i64(),
+    buyingPowerMicros: t.i64(),
+    currency: t.string(),
+    revision: t.u64(),
+    providerTime: t.timestamp(),
+    syncedAt: t.timestamp(),
+    marketOpen: t.bool(),
+    nextOpen: t.option(t.timestamp()),
+    nextClose: t.option(t.timestamp()),
+  }
+);
+
+/** Positions from the same revision as `paper_account`. Long-only quantities, micro-shares. */
+export const paperPosition = table(
+  {
+    name: 'paper_position',
+    indexes: [{ accessor: 'by_owner', algorithm: 'btree', columns: ['owner'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity(),
+    ticker: t.string(),
+    quantityMicros: t.i64(),
+    avgEntryMicros: t.i64(),
+    marketValueMicros: t.option(t.i64()),
+    unrealizedPlMicros: t.option(t.i64()),
+    revision: t.u64(),
+  }
+);
+
+/** Order intents and provider status. `queued` is not a fill. */
+export const paperOrder = table(
+  {
+    name: 'paper_order',
+    indexes: [{ accessor: 'by_owner_key', algorithm: 'btree', columns: ['owner', 'clientOrderKey'] }],
+  },
+  {
+    orderId: t.u64().primaryKey().autoInc(),
+    owner: t.identity().index('btree'),
+    clientOrderKey: t.string(),
+    ticker: t.string(),
+    side: t.string(),
+    quantityMicros: t.option(t.i64()),
+    notionalMicros: t.option(t.i64()),
+    quoteMicros: t.i64(),
+    quoteTime: t.timestamp(),
+    status: t.string(),
+    providerOrderId: t.option(t.string()),
+    filledQuantityMicros: t.i64(),
+    filledAvgPriceMicros: t.option(t.i64()),
+    rejectReason: t.option(t.string()),
+    revision: t.u64(),
+    createdAt: t.timestamp(),
+    updatedAt: t.timestamp(),
+  }
+);
+
 /** Repeating schedule that enqueues shared market ingestion (not user commands). */
 export const marketSchedule = table(
   { name: 'market_schedule' },
@@ -310,6 +457,12 @@ const spacetimedb = schema({
   dailyBar,
   marketGeneration,
   providerCapability,
+  recommendationGeneration,
+  recommendation,
+  paperBinding,
+  paperAccount,
+  paperPosition,
+  paperOrder,
   marketSchedule,
 });
 export default spacetimedb;

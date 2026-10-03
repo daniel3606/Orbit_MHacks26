@@ -3,7 +3,13 @@ import spacetimedb, {
   dailyBar,
   investmentProfile,
   job,
+  paperAccount,
+  paperBinding,
+  paperOrder,
+  paperPosition,
   profileBranding,
+  recommendation,
+  recommendationGeneration,
   serviceIdentity,
   userAccount,
 } from './schema';
@@ -33,6 +39,25 @@ export const myBranding = spacetimedb.view(
   ctx => ctx.db.profileBranding.owner.find(ctx.sender) ?? undefined
 );
 
+export const myRecommendationGeneration = spacetimedb.view(
+  { name: 'my_recommendation_generation', public: true },
+  t.option(recommendationGeneration.rowType),
+  ctx => ctx.db.recommendationGeneration.owner.find(ctx.sender) ?? undefined
+);
+
+/** Recommendations in the caller's current generation only. Never another user's. */
+export const myRecommendations = spacetimedb.view(
+  { name: 'my_recommendations', public: true },
+  t.array(recommendation.rowType),
+  ctx => {
+    const current = ctx.db.recommendationGeneration.owner.find(ctx.sender);
+    if (!current) return [];
+    return [...ctx.db.recommendation.by_owner_generation.filter([ctx.sender, current.generation])].sort(
+      (a, b) => a.displayRank - b.displayRank
+    );
+  }
+);
+
 export const myJobs = spacetimedb.view(
   { name: 'my_jobs', public: true },
   t.array(job.rowType),
@@ -40,6 +65,48 @@ export const myJobs = spacetimedb.view(
     [...ctx.db.job.owner.filter(ctx.sender)]
       .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch))
       .slice(0, MY_JOBS_LIMIT)
+);
+
+export const myPaperAccess = spacetimedb.view(
+  { name: 'my_paper_access', public: true },
+  t.option(paperBinding.rowType),
+  ctx => {
+    const binding = ctx.db.paperBinding.slot.find('demo');
+    if (!binding || !binding.owner.isEqual(ctx.sender)) return undefined;
+    return binding;
+  }
+);
+
+export const myPaperAccount = spacetimedb.view(
+  { name: 'my_paper_account', public: true },
+  t.option(paperAccount.rowType),
+  ctx => {
+    const binding = ctx.db.paperBinding.slot.find('demo');
+    if (!binding || !binding.owner.isEqual(ctx.sender)) return undefined;
+    return ctx.db.paperAccount.owner.find(ctx.sender) ?? undefined;
+  }
+);
+
+export const myPaperPositions = spacetimedb.view(
+  { name: 'my_paper_positions', public: true },
+  t.array(paperPosition.rowType),
+  ctx => {
+    const binding = ctx.db.paperBinding.slot.find('demo');
+    if (!binding || !binding.owner.isEqual(ctx.sender)) return [];
+    return [...ctx.db.paperPosition.by_owner.filter(ctx.sender)].sort((a, b) => a.ticker.localeCompare(b.ticker));
+  }
+);
+
+export const myPaperOrders = spacetimedb.view(
+  { name: 'my_paper_orders', public: true },
+  t.array(paperOrder.rowType),
+  ctx => {
+    const binding = ctx.db.paperBinding.slot.find('demo');
+    if (!binding || !binding.owner.isEqual(ctx.sender)) return [];
+    return [...ctx.db.paperOrder.owner.filter(ctx.sender)]
+      .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch))
+      .slice(0, MY_JOBS_LIMIT);
+  }
 );
 
 // ---- Service-gated worker views: non-service callers get nothing. ----
@@ -110,5 +177,43 @@ export const workerJobProfiles = spacetimedb.view(
       if (profile) out.push(profile);
     }
     return out;
+  }
+);
+
+/** Orders owned by a paper job this worker currently holds. */
+export const workerPaperOrders = spacetimedb.view(
+  { name: 'worker_paper_orders', public: true },
+  t.array(paperOrder.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return [];
+    const out = [];
+    const seen = new Set<string>();
+    const binding = ctx.db.paperBinding.slot.find('demo');
+    for (const row of ctx.db.job.status.filter(JOB_STATUS.running)) {
+      if (!row.leaseOwner || !row.leaseOwner.isEqual(ctx.sender)) continue;
+      if (row.kind !== 'submit_paper_order' && row.kind !== 'reconcile_paper_account') continue;
+      if (!binding || !binding.owner.isEqual(row.owner)) continue;
+      const key = row.owner.toHexString();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      for (const order of ctx.db.paperOrder.owner.filter(row.owner)) out.push(order);
+    }
+    return out;
+  }
+);
+
+export const workerPaperAccount = spacetimedb.view(
+  { name: 'worker_paper_account', public: true },
+  t.option(paperAccount.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return undefined;
+    const binding = ctx.db.paperBinding.slot.find('demo');
+    for (const row of ctx.db.job.status.filter(JOB_STATUS.running)) {
+      if (!row.leaseOwner || !row.leaseOwner.isEqual(ctx.sender)) continue;
+      if (row.kind !== 'submit_paper_order' && row.kind !== 'reconcile_paper_account') continue;
+      if (!binding || !binding.owner.isEqual(row.owner)) continue;
+      return ctx.db.paperAccount.owner.find(row.owner) ?? undefined;
+    }
+    return undefined;
   }
 );

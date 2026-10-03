@@ -16,6 +16,8 @@ export const JOB_KIND = {
   refreshRecommendations: 'refresh_recommendations',
   backendCheck: 'backend_check',
   ingestMarket: 'ingest_market',
+  submitPaperOrder: 'submit_paper_order',
+  reconcilePaperAccount: 'reconcile_paper_account',
 } as const;
 
 const KNOWN_JOB_KINDS: readonly string[] = Object.values(JOB_KIND);
@@ -104,6 +106,40 @@ export function enqueueRecommendationRefresh(ctx: Ctx, owner: Identity, profileV
   insertJob(ctx, owner, JOB_KIND.refreshRecommendations, `refresh:v${profileVersion}`, profileVersion, '{}');
 }
 
+const PAPER_RECONCILE_RETENTION = 20;
+
+/** One submit job per client order key. A repeated tap with the same key does not add another. */
+export function enqueuePaperSubmit(ctx: Ctx, owner: Identity, clientOrderKey: string) {
+  if (findByRequestKey(ctx, owner, clientOrderKey)) return;
+  insertJob(ctx, owner, JOB_KIND.submitPaperOrder, clientOrderKey, 0, '{}');
+}
+
+/**
+ * One active reconcile per owner. A finished reconcile does not block the next
+ * poll. Older terminal reconcile jobs are pruned.
+ */
+export function enqueuePaperReconcile(ctx: Ctx, owner: Identity, delaySeconds: number) {
+  for (const row of ctx.db.job.owner.filter(owner)) {
+    if (row.kind === JOB_KIND.reconcilePaperAccount && isActive(row.status)) return;
+  }
+  const terminal = [...ctx.db.job.owner.filter(owner)]
+    .filter(row => row.kind === JOB_KIND.reconcilePaperAccount && !isActive(row.status))
+    .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch));
+  for (const old of terminal.slice(PAPER_RECONCILE_RETENTION - 1)) ctx.db.job.jobId.delete(old.jobId);
+
+  const row = insertJob(
+    ctx,
+    owner,
+    JOB_KIND.reconcilePaperAccount,
+    `reconcile:${ctx.timestamp.microsSinceUnixEpoch}`,
+    0,
+    '{}'
+  );
+  if (delaySeconds > 0) {
+    ctx.db.job.jobId.update({ ...row, availableAt: plusSeconds(ctx.timestamp, delaySeconds) });
+  }
+}
+
 /**
  * Enqueues one shared market-ingestion job unless one is already active
  * (scheduled ticks and manual requests coalesce). Owned by the database
@@ -129,6 +165,38 @@ export function enqueueMarketIngest(ctx: Ctx, reason: string) {
   );
   ctx.db.job.jobId.update({ ...row, maxAttempts: 3 });
 }
+
+const REFRESH_MIN_INTERVAL_SECONDS = 30;
+
+/**
+ * User command: recompute matches from the current profile and the shared
+ * market generation. An in-flight refresh is coalesced onto this profile
+ * version instead of adding a second job. A refresh that just succeeded is
+ * rate-limited; profile edits use `enqueueRecommendationRefresh` directly.
+ */
+export const requestRecommendations = spacetimedb.reducer(ctx => {
+  requireConsumer(ctx);
+  const profile = ctx.db.investmentProfile.owner.find(ctx.sender);
+  if (!profile) throw new SenderError('profile_not_found');
+  for (const row of ctx.db.job.owner.filter(ctx.sender)) {
+    if (row.kind !== JOB_KIND.refreshRecommendations) continue;
+    if (row.status === JOB_STATUS.queued || row.status === JOB_STATUS.retryWait || row.status === JOB_STATUS.running) {
+      enqueueRecommendationRefresh(ctx, ctx.sender, profile.profileVersion);
+      return;
+    }
+  }
+  const latestSuccess = [...ctx.db.job.owner.filter(ctx.sender)]
+    .filter(row => row.kind === JOB_KIND.refreshRecommendations && row.status === JOB_STATUS.succeeded)
+    .sort((a, b) => Number(b.updatedAt.microsSinceUnixEpoch - a.updatedAt.microsSinceUnixEpoch))[0];
+  if (
+    latestSuccess &&
+    ctx.timestamp.microsSinceUnixEpoch - latestSuccess.updatedAt.microsSinceUnixEpoch <
+      BigInt(REFRESH_MIN_INTERVAL_SECONDS) * MICROS_PER_SECOND
+  ) {
+    throw new SenderError('rate_limited');
+  }
+  enqueueRecommendationRefresh(ctx, ctx.sender, profile.profileVersion);
+});
 
 /** Service or admin: run market ingestion now (coalesces with any active run). */
 export const requestMarketIngest = spacetimedb.reducer(ctx => {
@@ -180,6 +248,10 @@ export const claimJob = spacetimedb.reducer(
     requireService(ctx);
     const row = ctx.db.job.jobId.find(jobId);
     if (!row) throw new SenderError('job_not_found');
+    if (row.kind === JOB_KIND.submitPaperOrder || row.kind === JOB_KIND.reconcilePaperAccount) {
+      const binding = ctx.db.paperBinding.slot.find('demo');
+      if (!binding || !binding.owner.isEqual(row.owner)) throw new SenderError('paper_not_enabled');
+    }
 
     const now = ctx.timestamp.microsSinceUnixEpoch;
     const waiting =

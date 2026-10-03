@@ -7,10 +7,14 @@ import sys
 
 from app.config.settings import get_settings
 from app.config.universe import load_universe
+from app.market.alpaca import AlpacaHistoricalProvider
 from app.market.finnhub import FinnhubProvider
 from app.market.ingest import IngestMarketHandler
+from app.market.routing import RoutedMarketProvider
 from app.signals.config import SignalConfig
 from app.state.gateway import GatewayError, SpacetimeGateway
+from app.trading.alpaca import AlpacaPaperProvider
+from app.trading.execute import ReconcilePaperAccountHandler, SubmitPaperOrderHandler
 from app.workers.handlers import default_handlers
 from app.workers.runner import Worker
 
@@ -30,7 +34,8 @@ async def main() -> int:
         str(settings.spacetime_http_url),
         settings.spacetime_database,
         token,
-        timeout=settings.spacetime_timeout_seconds,
+        # The first historical backfill publishes hundreds of bars in one reducer call.
+        timeout=max(settings.spacetime_timeout_seconds, 60.0),
     ) as gateway:
         try:
             grant = await gateway.service_grant()
@@ -42,19 +47,64 @@ async def main() -> int:
             return 3
 
         handlers = default_handlers(settings.worker_id)
-        provider: FinnhubProvider | None = None
+        provider: RoutedMarketProvider | None = None
         if settings.market_ingest_enabled and settings.finnhub_api_key is not None:
-            provider = FinnhubProvider(
+            quotes = FinnhubProvider(
                 settings.finnhub_api_key,
                 base_url=str(settings.finnhub_base_url).rstrip("/"),
                 calls_per_minute=settings.finnhub_calls_per_minute,
                 burst=settings.finnhub_burst,
                 max_retries=settings.finnhub_max_retries,
             )
+            history = None
+            if settings.alpaca_api_key_id is not None and settings.alpaca_api_secret_key is not None:
+                history = AlpacaHistoricalProvider(
+                    settings.alpaca_api_key_id,
+                    settings.alpaca_api_secret_key,
+                    base_url=str(settings.alpaca_data_base_url).rstrip("/"),
+                    calls_per_minute=settings.alpaca_data_calls_per_minute,
+                    burst=settings.alpaca_data_burst,
+                )
+            else:
+                log.warning("No Alpaca market-data keys; daily history stays on Finnhub capabilities")
+            provider = RoutedMarketProvider(quotes, history)
             ingest = IngestMarketHandler(provider, load_universe(), SignalConfig())
             handlers[ingest.kind] = ingest
         else:
             log.warning("Market ingestion disabled (no FINNHUB_API_KEY or MARKET_INGEST_ENABLED=false)")
+
+        paper: AlpacaPaperProvider | None = None
+        if (
+            settings.paper_demo_identity
+            and settings.alpaca_api_key_id is not None
+            and settings.alpaca_api_secret_key is not None
+        ):
+            paper = AlpacaPaperProvider(
+                settings.alpaca_api_key_id,
+                settings.alpaca_api_secret_key,
+                base_url=str(settings.alpaca_base_url).rstrip("/"),
+            )
+            account = await paper.get_account()
+            clock = await paper.get_clock()
+            tradable, fractionable = await paper.is_asset_supported("AAPL")
+            log.info(
+                "paper account cash=%s equity=%s currency=%s open=%s next_open=%s aapl_tradable=%s aapl_fractionable=%s",
+                account.cash,
+                account.equity,
+                account.currency,
+                clock.is_open,
+                clock.next_open.isoformat() if clock.next_open else None,
+                tradable,
+                fractionable,
+            )
+            handlers[SubmitPaperOrderHandler.kind] = SubmitPaperOrderHandler(
+                paper, demo_identity=settings.paper_demo_identity
+            )
+            handlers[ReconcilePaperAccountHandler.kind] = ReconcilePaperAccountHandler(
+                paper, demo_identity=settings.paper_demo_identity
+            )
+        else:
+            log.warning("Paper trading not registered (PAPER_DEMO_IDENTITY or Alpaca keys missing)")
 
         worker = Worker(
             gateway,
@@ -67,6 +117,8 @@ async def main() -> int:
         )
         await gateway.register_worker(worker.kinds)
         log.info("registered job kinds: %s", ", ".join(worker.kinds))
+        if paper is not None:
+            await gateway.request_paper_reconcile()
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -77,6 +129,8 @@ async def main() -> int:
         finally:
             if provider is not None:
                 await provider.aclose()
+            if paper is not None:
+                await paper.aclose()
         log.info("worker stopped")
     return 0
 

@@ -53,6 +53,40 @@ export const FEATURE_LABELS: Record<string, string> = {
   breadth_materiality: 'Source breadth & materiality',
 };
 
+export type FeedKind = 'sip' | 'iex' | 'none';
+
+/** Which daily-history feed the probed Alpaca capability is actually using. */
+export function historyFeed(capabilities: { key: string; available: boolean; detail: string }[]): FeedKind {
+  const bars = capabilities.find(c => c.key === 'alpaca.historical_bars');
+  if (!bars?.available) return 'none';
+  if (bars.detail.includes('feed=iex') || bars.detail.includes('not consolidated')) return 'iex';
+  return 'sip';
+}
+
+export function providerLabel(provider: string): string {
+  if (provider === 'finnhub+alpaca') return 'Quotes: Finnhub · Daily history: Alpaca';
+  if (provider === 'finnhub') return 'Finnhub';
+  if (provider === 'fixture') return 'Test fixture';
+  return provider;
+}
+
+/** Plain-language note. Internal quote bookkeeping stays in the raw note list. */
+export function explainNote(note: string): string | null {
+  if (note === 'adjustment:split') return 'Prices and volume are adjusted for stock splits, not dividends.';
+  if (note === 'iex_volume_not_consolidated') return 'Volume counts the IEX exchange only, not every US exchange.';
+  if (note === 'history_source:alpaca_sip') return 'Daily history: Alpaca consolidated US tape.';
+  if (note === 'history_source:alpaca_iex') return 'Daily history: Alpaca IEX feed.';
+  if (note.startsWith('history_source:')) return `Daily history: ${note.slice('history_source:'.length)}.`;
+  if (note.startsWith('benchmark_fallback:')) {
+    const fallback = note.split('->')[1];
+    return fallback ? `The sector benchmark was missing, so ${fallback} was used instead.` : note;
+  }
+  if (note.startsWith('history_unavailable:')) return 'Daily history could not be refreshed for this stock.';
+  if (note === 'quote_stale') return 'The latest quote is older than the usual update window.';
+  if (note.startsWith('quote_')) return null;
+  return note;
+}
+
 export function explainReason(reason: string | null): string {
   if (!reason) return '';
   const [code, detail] = reason.split(/:(.*)/s);
@@ -82,4 +116,32 @@ export function explainReason(reason: string | null): string {
     default:
       return reason;
   }
+}
+
+/** Integer micro-units (1e-6). Display only; orders keep the integer. */
+export function formatMicros(micros: string, digits = 2): string {
+  if (!/^-?\d+$/.test(micros)) return '—';
+  const negative = micros.startsWith('-');
+  const digitsOnly = negative ? micros.slice(1) : micros;
+  const padded = digitsOnly.padStart(7, '0');
+  const whole = padded.slice(0, -6);
+  const frac = padded.slice(-6, -6 + digits);
+  return `${negative ? '−' : ''}$${BigInt(whole).toLocaleString('en-US')}.${frac}`;
+}
+
+export function formatShares(micros: string): string {
+  if (!/^\d+$/.test(micros)) return '—';
+  const padded = micros.padStart(7, '0');
+  const whole = padded.slice(0, -6);
+  const frac = padded.slice(-6).replace(/0+$/, '');
+  return frac ? `${BigInt(whole).toLocaleString('en-US')}.${frac}` : BigInt(whole).toLocaleString('en-US');
+}
+
+export function parseDecimalMicros(text: string): bigint | null {
+  const trimmed = text.trim();
+  if (!/^\d+(\.\d{1,6})?$/.test(trimmed)) return null;
+  const [whole, frac = ''] = trimmed.split('.');
+  const padded = (frac + '000000').slice(0, 6);
+  const value = BigInt(whole) * 1_000_000n + BigInt(padded);
+  return value > 0n ? value : null;
 }

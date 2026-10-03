@@ -15,6 +15,7 @@ from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any, Protocol
 
 from app.config.universe import Universe
+from app.market.alpaca import session_safe_for_historical_sip
 from app.market.calendar import UsEquityCalendar
 from app.market.http import ProviderAccessDenied, ProviderError
 from app.market.provider import (
@@ -35,15 +36,41 @@ from app.workers.runner import Committed, JobFailure
 
 log = logging.getLogger(__name__)
 
-SOURCE_RANK = {"fixture": 1, "finnhub_quote": 2, "finnhub_candle": 3}
+# Alpaca SIP and IEX share a rank so either can replace the other on one
+# session. Calculations still keep a single feed (see select_signal_bars).
+SOURCE_RANK = {"fixture": 1, "finnhub_quote": 2, "finnhub_candle": 3, "alpaca_iex": 4, "alpaca_sip": 4}
+OHLCV_SOURCES = frozenset({"fixture", "finnhub_candle", "alpaca_iex", "alpaca_sip"})
 CLOSE_CONFLICT_TOLERANCE = Decimal("0.005")  # 0.5%: same session reported differently → adjustment event
 
 
+def history_calendar_days(cfg: SignalConfig) -> int:
+    """Calendar span covering lookback plus the prior normalization baseline.
+
+    ``required_sessions`` is 81 trading days. About 252 sessions fit in a
+    year, so 460 calendar days is roughly 320 sessions: above the publication
+    window and under the 400-bar store cap.
+    """
+    return max(460, cfg.required_sessions * 3)
+
+
+def select_signal_bars(bars: dict[date, DailyBar], active: str | None) -> list[DailyBar]:
+    """One adjustment convention and one volume feed.
+
+    Quote-derived closes are not spliced into an OHLCV series. SIP and IEX
+    volumes are never combined, even across different sessions.
+    """
+    if active in OHLCV_SOURCES:
+        return [b for b in bars.values() if b.source == active]
+    return [b for b in bars.values() if b.source not in OHLCV_SOURCES]
+
+
 class IngestProvider(Protocol):
-    name: str
+    @property
+    def name(self) -> str: ...
 
     async def capabilities(self) -> list[CapabilityResult]: ...
     async def has(self, key: str) -> bool: ...
+    async def history_source(self) -> str | None: ...
     async def get_quote(self, ticker: str) -> Quote: ...
     async def get_daily_bars(self, ticker: str, start: date, end: date) -> list[DailyBar]: ...
     async def get_profile(self, ticker: str) -> CompanyProfile | None: ...
@@ -147,13 +174,13 @@ class IngestMarketHandler:
         universe: Universe,
         cfg: SignalConfig,
         *,
-        candle_days: int = 180,
+        history_days: int | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
         self._provider = provider
         self._universe = universe
         self._cfg = cfg
-        self._candle_days = candle_days
+        self._history_days = history_calendar_days(cfg) if history_days is None else history_days
         self._clock = clock
 
     async def run(self, job: JobV1, gateway: SpacetimeGateway) -> Committed:
@@ -200,18 +227,36 @@ class IngestMarketHandler:
                 notes[ticker].append("quote_stale")
             quotes[ticker] = result
 
-        # History: stored bars + candles (if the plan allows) or quote-derived closes.
+        # History stays on one source. Alpaca bars are not filled with Finnhub quotes.
+        active = await provider.history_source()
+        score_through = last_completed
+        if active in ("alpaca_sip", "alpaca_iex"):
+            score_through = session_safe_for_historical_sip(cal, started)
+            for eq in self._universe.equities:
+                notes[eq.ticker].append(f"history_source:{active}")
+                notes[eq.ticker].append("adjustment:split")
+                if active == "alpaca_iex":
+                    notes[eq.ticker].append("iex_volume_not_consolidated")
+        elif active is not None:
+            for eq in self._universe.equities:
+                notes[eq.ticker].append(f"history_source:{active}")
+
         stored: dict[str, dict[date, DailyBar]] = defaultdict(dict)
         for row in await gateway.worker_daily_bars():
             stored[row.ticker][date.fromisoformat(row.session_date)] = from_stored(row)
         incoming: list[DailyBar] = []
-        if await provider.has("daily_candles"):
-            start = last_completed - timedelta(days=self._candle_days)
-            for ticker in tickers:
-                try:
-                    incoming.extend(await provider.get_daily_bars(ticker, start, last_completed))
-                except ProviderAccessDenied:
-                    notes[ticker].append("candles_access_denied")
+        if active is not None:
+            start = score_through - timedelta(days=self._history_days)
+            fetched_hist = await asyncio.gather(
+                *(provider.get_daily_bars(t, start, score_through) for t in tickers),
+                return_exceptions=True,
+            )
+            for ticker, history in zip(tickers, fetched_hist, strict=True):
+                if isinstance(history, BaseException):
+                    code = history.code if isinstance(history, ProviderError) else "internal_error"
+                    notes[ticker].append(f"history_unavailable:{code}")
+                    continue
+                incoming.extend(history)
         else:
             for q in quotes.values():
                 incoming.extend(bars_from_quote(q, started, cal))
@@ -219,7 +264,7 @@ class IngestMarketHandler:
         blocked: dict[str, str] = {}
         to_publish: list[DailyBar] = []
         for bar in incoming:
-            if bar.session > last_completed:
+            if bar.session > score_through:
                 continue
             prior = stored[bar.ticker].get(bar.session)
             if prior is not None:
@@ -234,19 +279,19 @@ class IngestMarketHandler:
             to_publish.append(bar)
 
         # Signals for equities against their configured (or fallback) benchmark.
-        sessions = cal.sessions_between(last_completed - timedelta(days=400), last_completed)
+        sessions = cal.sessions_between(score_through - timedelta(days=self._history_days), score_through)
         signals: list[SignalResult] = []
         for eq in self._universe.equities:
             benchmark = eq.benchmark
-            if not stored.get(benchmark):
+            if not select_signal_bars(stored[benchmark], active):
                 notes[eq.ticker].append(f"benchmark_fallback:{benchmark}->{self._universe.fallback_benchmark}")
                 benchmark = self._universe.fallback_benchmark
             signal = compute_signal(
                 eq.ticker,
                 benchmark,
-                list(stored[eq.ticker].values()),
-                list(stored[benchmark].values()),
-                last_completed,
+                select_signal_bars(stored[eq.ticker], active),
+                select_signal_bars(stored[benchmark], active),
+                score_through,
                 sessions,
                 self._cfg,
                 extra_blocking=blocked.get(eq.ticker) or blocked.get(benchmark),
@@ -274,8 +319,8 @@ class IngestMarketHandler:
         )
         published = sum(1 for s in signals if s.status == "published")
         log.info(
-            "market generation %s: %d quotes, %d new bars, %d signals (%d scored)",
-            generation, len(quotes), len(to_publish), len(signals), published,
+            "market generation %s: %d quotes, %d new bars, %d signals (%d scored), history=%s through %s",
+            generation, len(quotes), len(to_publish), len(signals), published, active or "quotes", score_through,
         )
         return Committed(f"generation={generation}")
 
@@ -285,7 +330,13 @@ class IngestMarketHandler:
         if changed:
             await gateway.publish_provider_capabilities(
                 [
-                    {"key": c.key, "provider": self._provider.name, "capability": c.capability, "available": c.available, "detail": c.detail}
+                    {
+                        "key": c.key,
+                        "provider": c.provider or self._provider.name,
+                        "capability": c.capability,
+                        "available": c.available,
+                        "detail": c.detail,
+                    }
                     for c in changed
                 ]
             )

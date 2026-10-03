@@ -34,17 +34,25 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ApplyPaperSnapshotReducer from "./apply_paper_snapshot_reducer";
+import BindPaperDemoReducer from "./bind_paper_demo_reducer";
 import ClaimJobReducer from "./claim_job_reducer";
 import CompleteJobReducer from "./complete_job_reducer";
 import CompleteOnboardingReducer from "./complete_onboarding_reducer";
 import ConfigureMarketScheduleReducer from "./configure_market_schedule_reducer";
+import CreatePaperOrderIntentReducer from "./create_paper_order_intent_reducer";
 import FailJobReducer from "./fail_job_reducer";
 import GrantServiceIdentityReducer from "./grant_service_identity_reducer";
 import PublishMarketSnapshotReducer from "./publish_market_snapshot_reducer";
 import PublishProviderCapabilitiesReducer from "./publish_provider_capabilities_reducer";
+import PublishRecommendationsReducer from "./publish_recommendations_reducer";
+import RebindPaperDemoReducer from "./rebind_paper_demo_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RequestBackendCheckReducer from "./request_backend_check_reducer";
 import RequestMarketIngestReducer from "./request_market_ingest_reducer";
+import RequestPaperReconcileReducer from "./request_paper_reconcile_reducer";
+import RequestPaperSyncReducer from "./request_paper_sync_reducer";
+import RequestRecommendationsReducer from "./request_recommendations_reducer";
 import RevokeServiceIdentityReducer from "./revoke_service_identity_reducer";
 import SetServiceFlagReducer from "./set_service_flag_reducer";
 import UpdatePreferencesReducer from "./update_preferences_reducer";
@@ -58,7 +66,13 @@ import MarketQuoteRow from "./market_quote_table";
 import MyAccountRow from "./my_account_table";
 import MyBrandingRow from "./my_branding_table";
 import MyJobsRow from "./my_jobs_table";
+import MyPaperAccessRow from "./my_paper_access_table";
+import MyPaperAccountRow from "./my_paper_account_table";
+import MyPaperOrdersRow from "./my_paper_orders_table";
+import MyPaperPositionsRow from "./my_paper_positions_table";
 import MyProfileRow from "./my_profile_table";
+import MyRecommendationGenerationRow from "./my_recommendation_generation_table";
+import MyRecommendationsRow from "./my_recommendations_table";
 import MyServiceGrantRow from "./my_service_grant_table";
 import ProviderCapabilityRow from "./provider_capability_table";
 import StockRow from "./stock_table";
@@ -66,6 +80,8 @@ import TrendSignalRow from "./trend_signal_table";
 import WorkerDailyBarsRow from "./worker_daily_bars_table";
 import WorkerJobProfilesRow from "./worker_job_profiles_table";
 import WorkerJobsRow from "./worker_jobs_table";
+import WorkerPaperAccountRow from "./worker_paper_account_table";
+import WorkerPaperOrdersRow from "./worker_paper_orders_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -150,6 +166,34 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyJobsRow),
+  myPaperAccess: __table({
+    name: 'my_paper_access',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyPaperAccessRow),
+  myPaperAccount: __table({
+    name: 'my_paper_account',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyPaperAccountRow),
+  myPaperOrders: __table({
+    name: 'my_paper_orders',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyPaperOrdersRow),
+  myPaperPositions: __table({
+    name: 'my_paper_positions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyPaperPositionsRow),
   myProfile: __table({
     name: 'my_profile',
     indexes: [
@@ -157,6 +201,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyProfileRow),
+  myRecommendationGeneration: __table({
+    name: 'my_recommendation_generation',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyRecommendationGenerationRow),
+  myRecommendations: __table({
+    name: 'my_recommendations',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyRecommendationsRow),
   myServiceGrant: __table({
     name: 'my_service_grant',
     indexes: [
@@ -185,21 +243,43 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, WorkerJobsRow),
+  workerPaperAccount: __table({
+    name: 'worker_paper_account',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerPaperAccountRow),
+  workerPaperOrders: __table({
+    name: 'worker_paper_orders',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerPaperOrdersRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("apply_paper_snapshot", ApplyPaperSnapshotReducer),
+  __reducerSchema("bind_paper_demo", BindPaperDemoReducer),
   __reducerSchema("claim_job", ClaimJobReducer),
   __reducerSchema("complete_job", CompleteJobReducer),
   __reducerSchema("complete_onboarding", CompleteOnboardingReducer),
   __reducerSchema("configure_market_schedule", ConfigureMarketScheduleReducer),
+  __reducerSchema("create_paper_order_intent", CreatePaperOrderIntentReducer),
   __reducerSchema("fail_job", FailJobReducer),
   __reducerSchema("grant_service_identity", GrantServiceIdentityReducer),
   __reducerSchema("publish_market_snapshot", PublishMarketSnapshotReducer),
   __reducerSchema("publish_provider_capabilities", PublishProviderCapabilitiesReducer),
+  __reducerSchema("publish_recommendations", PublishRecommendationsReducer),
+  __reducerSchema("rebind_paper_demo", RebindPaperDemoReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("request_backend_check", RequestBackendCheckReducer),
   __reducerSchema("request_market_ingest", RequestMarketIngestReducer),
+  __reducerSchema("request_paper_reconcile", RequestPaperReconcileReducer),
+  __reducerSchema("request_paper_sync", RequestPaperSyncReducer),
+  __reducerSchema("request_recommendations", RequestRecommendationsReducer),
   __reducerSchema("revoke_service_identity", RevokeServiceIdentityReducer),
   __reducerSchema("set_service_flag", SetServiceFlagReducer),
   __reducerSchema("update_preferences", UpdatePreferencesReducer),

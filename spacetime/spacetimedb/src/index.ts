@@ -8,12 +8,15 @@ export default spacetimedb;
 export { completeOnboarding, updatePreferences } from './profile';
 export {
   requestBackendCheck,
+  requestRecommendations,
   claimJob,
   completeJob,
   failJob,
   registerWorker,
   requestMarketIngest,
 } from './jobs';
+export { publishRecommendations } from './recommendations';
+export { bindPaperDemo, rebindPaperDemo, createPaperOrderIntent, requestPaperSync, requestPaperReconcile, applyPaperSnapshot } from './paper';
 export {
   marketTick,
   configureMarketSchedule,
@@ -27,10 +30,18 @@ export {
   myProfile,
   myBranding,
   myJobs,
+  myRecommendationGeneration,
+  myRecommendations,
+  myPaperAccess,
+  myPaperAccount,
+  myPaperPositions,
+  myPaperOrders,
   myServiceGrant,
   workerJobs,
   workerDailyBars,
   workerJobProfiles,
+  workerPaperOrders,
+  workerPaperAccount,
 } from './views';
 
 const DEFAULT_MARKET_INTERVAL_SECONDS = 300;

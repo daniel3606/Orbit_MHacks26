@@ -122,3 +122,71 @@ class ProviderCapabilityV1(_Dto):
     available: bool
     detail: str
     checked_at: datetime
+
+
+class SignalFeatureV1(_Dto):
+    name: str
+    available: bool
+    raw: float | None
+    normalized: float | None
+    weight: float
+    sample_count: int
+    baseline_count: int
+    reason: str | None
+
+
+class TrendSignalV1(_Dto):
+    ticker: str
+    generation: int
+    algorithm_version: str
+    session_date: str
+    status: str
+    trend_score: float | None
+    composite: float | None
+    coverage: float
+    coverage_scope: str
+    benchmark: str
+    history_sessions: int
+    required_sessions: int
+    day_return: float | None
+    benchmark_day_return: float | None
+    relative_day_return: float | None
+    features: list[SignalFeatureV1]
+    notes: list[str]
+    as_of: datetime
+    published_at: datetime
+
+
+class PaperAccountV1(_Dto):
+    owner: IdentityHex
+    provider_account_id: str
+    cash_micros: int
+    equity_micros: int
+    buying_power_micros: int
+    currency: str
+    revision: int
+    provider_time: datetime
+    synced_at: datetime
+    market_open: bool
+    next_open: datetime | None
+    next_close: datetime | None
+
+
+class PaperOrderV1(_Dto):
+    order_id: int
+    owner: IdentityHex
+    client_order_key: str
+    ticker: str
+    side: Literal["buy", "sell"]
+    quantity_micros: int | None
+    notional_micros: int | None
+    quote_micros: int
+    quote_time: datetime
+    status: str
+    provider_order_id: str | None
+    filled_quantity_micros: int
+    filled_avg_price_micros: int | None
+    reject_reason: str | None
+    revision: int
+    created_at: datetime
+    updated_at: datetime

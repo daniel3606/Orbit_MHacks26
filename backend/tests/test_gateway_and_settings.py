@@ -70,6 +70,16 @@ def test_alpaca_live_endpoint_rejected():
         Settings(alpaca_base_url="https://api.alpaca.markets", _env_file=None)
 
 
+def test_alpaca_data_host_is_not_a_trading_endpoint():
+    with pytest.raises(ValidationError):
+        Settings(alpaca_data_base_url="https://api.alpaca.markets", _env_file=None)
+    with pytest.raises(ValidationError):
+        Settings(alpaca_data_base_url="https://paper-api.alpaca.markets", _env_file=None)
+    settings = Settings(_env_file=None, spacetime_service_token_file=None)
+    assert settings.alpaca_data_base_url.host == "data.alpaca.markets"
+    assert settings.alpaca_base_url.host == "paper-api.alpaca.markets"
+
+
 def test_alpaca_keys_must_be_paired():
     with pytest.raises(ValidationError):
         Settings(alpaca_api_key_id="abc", _env_file=None)

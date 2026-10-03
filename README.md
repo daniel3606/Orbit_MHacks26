@@ -83,6 +83,17 @@ and the worker token allowlisted).
 - Fixture data is rejected unless an admin runs `set_service_flag "allow_fixture_data" true`. Only the tests do
   this, and only on `orbit-test`.
 
+### Paper trading
+
+- Keep `ALPACA_BASE_URL` on `https://paper-api.alpaca.markets`. Market-data keys use `data.alpaca.markets` and cannot place orders.
+- Bind one guest, once, as the module admin. A different identity is rejected:
+
+  `spacetime call orbit-dev bind_paper_demo --server local '"0x<64 hex characters>"'`
+
+- Put that same identity in `backend/.env` as `PAPER_DEMO_IDENTITY`, then restart `make worker`. Without it, paper jobs are not registered.
+- The bound guest reviews an order on the stock screen and must press **Confirm paper order**. Practice shows the Alpaca cash and equity after the worker syncs. No balance is invented.
+- On this `orbit-dev` database the bound guest is the profile with moderate risk, a months horizon, and financials only. The synced paper cash is $100,000. There are no open orders.
+
 ### Physical iPhone
 
 `localhost` on the phone is the phone. In development the app derives the SpacetimeDB address from the Metro host
@@ -97,16 +108,18 @@ The in-app **Connection diagnostics** screen shows the resolved address and runt
 make check
 ```
 
-- `make test-spacetime` — republishes a throwaway `orbit-test` database (data wiped) and runs 25 WebSocket SDK
+- `make test-spacetime` — republishes a throwaway `orbit-test` database (data wiped) and runs 31 WebSocket SDK
   integration tests:
   - subscription-then-mutation, two-identity isolation, validation, optimistic versioning, session restore
   - worker gating, idempotent enqueue, claim/complete, duplicate completion, backoff, lease-expiry fencing, revocation
   - market publication authorization, stale/out-of-order/invalid snapshots
+  - recommendation publication, owner isolation, and stale-profile rejection
+  - paper-order ownership, idempotent client keys, stale account revisions, partial fills, rejection, and lease restart
   - Python worker → SpacetimeDB → subscribed client (labeled fixture provider)
 - `make test-backend` — unit tests (hand-calculated features, prior-only normalization, coverage, provider retry,
   rate limits and deduplication, calendar) plus real-server worker round trips against `orbit-test`. The
   real-server tests are skipped automatically if the server or database is absent.
-- `make test-live` — opt-in checks against the real Finnhub API with your key. Kept separate from fixture tests.
+- `make test-live` — opt-in checks against Finnhub and Alpaca Market Data with the backend keys. Kept separate from fixture tests.
 - `make typecheck` — `tsc` for module, tests and app; `expo lint`; app ↔ module preference-contract check; `mypy --strict`.
 
 ## Changing the module

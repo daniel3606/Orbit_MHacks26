@@ -83,6 +83,7 @@ export type StockVM = {
 export type QuoteVM = {
   ticker: string;
   price: number; // display only (fixed-point micros converted)
+  priceMicros: string;
   previousClose: number;
   providerTime: Date;
   publishedAt: Date;
@@ -125,6 +126,84 @@ export type GenerationVM = {
   algorithmVersion: string;
 };
 export type CapabilityVM = { key: string; capability: string; available: boolean; detail: string; checkedAt: Date };
+export type FitComponentVM = {
+  name: string;
+  available: boolean;
+  value: number | null;
+  weight: number;
+  reason: string | null;
+};
+export type RecommendationVM = {
+  ticker: string;
+  displayRank: number;
+  trendScore: number;
+  fitScore: number;
+  recommendationRank: number;
+  fitCoverage: number;
+  components: FitComponentVM[];
+  realizedVol: number | null;
+  maxDrawdown: number | null;
+  volSessions: number;
+  drawdownSessions: number;
+  sector: string;
+  benchmark: string;
+  sessionDate: string;
+  historySource: string;
+  matchReason: string;
+  marketActivity: string;
+  riskObservation: string;
+  learningNote: string;
+  limitations: string[];
+};
+export type RecommendationGenerationVM = {
+  generation: string;
+  status: string;
+  profileVersion: number;
+  marketGeneration: string;
+  signalAlgorithmVersion: string;
+  fitAlgorithmVersion: string;
+  signalSessionDate: string;
+  consideredCount: number;
+  eligibleCount: number;
+  publishedCount: number;
+  summary: string;
+  limitations: string[];
+  publishedAt: Date;
+};
+
+export type PaperAccountVM = {
+  cashMicros: string;
+  equityMicros: string;
+  buyingPowerMicros: string;
+  currency: string;
+  revision: string;
+  providerTime: Date;
+  syncedAt: Date;
+  marketOpen: boolean;
+  nextOpen: Date | null;
+  nextClose: Date | null;
+};
+export type PaperPositionVM = {
+  ticker: string;
+  quantityMicros: string;
+  avgEntryMicros: string;
+  marketValueMicros: string | null;
+  unrealizedPlMicros: string | null;
+};
+export type PaperOrderVM = {
+  clientOrderKey: string;
+  ticker: string;
+  side: string;
+  quantityMicros: string | null;
+  notionalMicros: string | null;
+  quoteMicros: string;
+  quoteTime: Date;
+  status: string;
+  filledQuantityMicros: string;
+  filledAvgPriceMicros: string | null;
+  rejectReason: string | null;
+  updatedAt: Date;
+};
 export type MarketVM = {
   /** A screen currently holds the market subscription. */
   subscribed: boolean;
@@ -163,6 +242,12 @@ export type RealtimeSnapshot = {
   profile: ProfileVM | null;
   branding: BrandingVM | null;
   jobs: JobVM[];
+  recommendations: RecommendationVM[];
+  recommendationGeneration: RecommendationGenerationVM | null;
+  paperEnabled: boolean;
+  paperAccount: PaperAccountVM | null;
+  paperPositions: PaperPositionVM[];
+  paperOrders: PaperOrderVM[];
   market: MarketVM;
   diagnostics: Diagnostics;
 };
@@ -183,6 +268,12 @@ function initialSnapshot(): RealtimeSnapshot {
     profile: null,
     branding: null,
     jobs: [],
+    recommendations: [],
+    recommendationGeneration: null,
+    paperEnabled: false,
+    paperAccount: null,
+    paperPositions: [],
+    paperOrders: [],
     market: EMPTY_MARKET,
     diagnostics: {
       uri: config.spacetimeUri,
@@ -356,7 +447,18 @@ class ConnectionManager {
         if (!isCurrent()) return;
         this.fail(new AppError('subscription_failed', ctx.event?.message));
       })
-      .subscribe([tables.myAccount, tables.myProfile, tables.myBranding, tables.myJobs]);
+      .subscribe([
+        tables.myAccount,
+        tables.myProfile,
+        tables.myBranding,
+        tables.myJobs,
+        tables.myRecommendationGeneration,
+        tables.myRecommendations,
+        tables.myPaperAccess,
+        tables.myPaperAccount,
+        tables.myPaperPositions,
+        tables.myPaperOrders,
+      ]);
   }
 
   private attachTableListeners(conn: DbConnection, isCurrent: () => boolean) {
@@ -369,6 +471,12 @@ class ConnectionManager {
       conn.db.myProfile,
       conn.db.myBranding,
       conn.db.myJobs,
+      conn.db.myRecommendationGeneration,
+      conn.db.myRecommendations,
+      conn.db.myPaperAccess,
+      conn.db.myPaperAccount,
+      conn.db.myPaperPositions,
+      conn.db.myPaperOrders,
       conn.db.stock,
       conn.db.marketQuote,
       conn.db.trendSignal,
@@ -455,6 +563,95 @@ class ConnectionManager {
           ? { identityHex: a.identity.toHexString(), issuer: a.issuer, subject: a.subject, firstSeenAt: toDate(a.firstSeenAt) }
           : null,
         jobs,
+        recommendations: [...conn.db.myRecommendations.iter()]
+          .map(
+            (row): RecommendationVM => ({
+              ticker: row.ticker,
+              displayRank: row.displayRank,
+              trendScore: row.trendScore,
+              fitScore: row.fitScore,
+              recommendationRank: row.recommendationRank,
+              fitCoverage: row.fitCoverage,
+              components: row.components.map(component => ({
+                name: component.name,
+                available: component.available,
+                value: component.value ?? null,
+                weight: component.weight,
+                reason: component.reason ?? null,
+              })),
+              realizedVol: row.realizedVol ?? null,
+              maxDrawdown: row.maxDrawdown ?? null,
+              volSessions: row.volSessions,
+              drawdownSessions: row.drawdownSessions,
+              sector: row.sector,
+              benchmark: row.benchmark,
+              sessionDate: row.sessionDate,
+              historySource: row.historySource,
+              matchReason: row.matchReason,
+              marketActivity: row.marketActivity,
+              riskObservation: row.riskObservation,
+              learningNote: row.learningNote,
+              limitations: [...row.limitations],
+            })
+          )
+          .sort((a, b) => a.displayRank - b.displayRank),
+        recommendationGeneration: (() => {
+          const generation = [...conn.db.myRecommendationGeneration.iter()][0];
+          if (!generation) return null;
+          return {
+            generation: generation.generation.toString(),
+            status: generation.status,
+            profileVersion: generation.profileVersion,
+            marketGeneration: generation.marketGeneration.toString(),
+            signalAlgorithmVersion: generation.signalAlgorithmVersion,
+            fitAlgorithmVersion: generation.fitAlgorithmVersion,
+            signalSessionDate: generation.signalSessionDate,
+            consideredCount: generation.consideredCount,
+            eligibleCount: generation.eligibleCount,
+            publishedCount: generation.publishedCount,
+            summary: generation.summary,
+            limitations: [...generation.limitations],
+            publishedAt: toDate(generation.publishedAt),
+          };
+        })(),
+        paperEnabled: [...conn.db.myPaperAccess.iter()].length > 0,
+        paperAccount: (() => {
+          const row = [...conn.db.myPaperAccount.iter()][0];
+          if (!row) return null;
+          return {
+            cashMicros: row.cashMicros.toString(),
+            equityMicros: row.equityMicros.toString(),
+            buyingPowerMicros: row.buyingPowerMicros.toString(),
+            currency: row.currency,
+            revision: row.revision.toString(),
+            providerTime: toDate(row.providerTime),
+            syncedAt: toDate(row.syncedAt),
+            marketOpen: row.marketOpen,
+            nextOpen: row.nextOpen ? toDate(row.nextOpen) : null,
+            nextClose: row.nextClose ? toDate(row.nextClose) : null,
+          };
+        })(),
+        paperPositions: [...conn.db.myPaperPositions.iter()].map(row => ({
+          ticker: row.ticker,
+          quantityMicros: row.quantityMicros.toString(),
+          avgEntryMicros: row.avgEntryMicros.toString(),
+          marketValueMicros: row.marketValueMicros?.toString() ?? null,
+          unrealizedPlMicros: row.unrealizedPlMicros?.toString() ?? null,
+        })),
+        paperOrders: [...conn.db.myPaperOrders.iter()].map(row => ({
+          clientOrderKey: row.clientOrderKey,
+          ticker: row.ticker,
+          side: row.side,
+          quantityMicros: row.quantityMicros?.toString() ?? null,
+          notionalMicros: row.notionalMicros?.toString() ?? null,
+          quoteMicros: row.quoteMicros.toString(),
+          quoteTime: toDate(row.quoteTime),
+          status: row.status,
+          filledQuantityMicros: row.filledQuantityMicros.toString(),
+          filledAvgPriceMicros: row.filledAvgPriceMicros?.toString() ?? null,
+          rejectReason: row.rejectReason ?? null,
+          updatedAt: toDate(row.updatedAt),
+        })),
       },
       { lastEventAt: new Date() }
     );
@@ -467,6 +664,7 @@ class ConnectionManager {
       quotes[q.ticker] = {
         ticker: q.ticker,
         price: micros(q.priceMicros),
+        priceMicros: q.priceMicros.toString(),
         previousClose: micros(q.previousCloseMicros),
         providerTime: toDate(q.providerTime),
         publishedAt: toDate(q.publishedAt),
@@ -632,7 +830,21 @@ class ConnectionManager {
 
   private clearData() {
     this.jobObservations.clear();
-    this.patch({ hasSynced: false, stale: false, identityHex: null, account: null, profile: null, branding: null, jobs: [] });
+    this.patch({
+      hasSynced: false,
+      stale: false,
+      identityHex: null,
+      account: null,
+      profile: null,
+      branding: null,
+      jobs: [],
+      recommendations: [],
+      recommendationGeneration: null,
+      paperEnabled: false,
+      paperAccount: null,
+      paperPositions: [],
+      paperOrders: [],
+    });
   }
 
   // ---- public actions ----

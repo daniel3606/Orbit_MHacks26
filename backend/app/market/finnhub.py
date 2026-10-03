@@ -180,13 +180,18 @@ class FinnhubProvider:
         for key, label, path, params in probes:
             try:
                 await self._get(path, params, ttl=0)
-                out.append(CapabilityResult(f"{PROVIDER}.{key}", label, True, "Accessible with configured key"))
+                out.append(CapabilityResult(f"{PROVIDER}.{key}", label, True, "Accessible with configured key", PROVIDER))
             except ProviderAccessDenied as exc:
-                out.append(CapabilityResult(f"{PROVIDER}.{key}", label, False, f"{exc}; not included in current plan"))
+                out.append(CapabilityResult(f"{PROVIDER}.{key}", label, False, f"{exc}; not included in current plan", PROVIDER))
         return out
 
     async def has(self, key: str) -> bool:
         return any(c.key == f"{PROVIDER}.{key}" and c.available for c in await self.capabilities())
+
+    async def history_source(self) -> str | None:
+        if await self.has("daily_candles"):
+            return "finnhub_candle"
+        return None
 
     # ---- data ----
 
