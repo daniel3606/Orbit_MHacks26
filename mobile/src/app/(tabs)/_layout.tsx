@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Image, type ImageSourcePropType } from 'react-native';
+import { Easing, Image, type ImageSourcePropType } from 'react-native';
 
 import { colors, font } from '@/ui/theme';
 
@@ -32,6 +32,11 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontFamily: font.regular, fontSize: 11 },
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
+        animation: 'fade',
+        transitionSpec: {
+          animation: 'timing',
+          config: { duration: 280, easing: Easing.out(Easing.cubic) },
+        },
       }}>
       <Tabs.Screen
         name="index"
