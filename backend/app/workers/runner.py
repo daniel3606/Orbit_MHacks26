@@ -10,6 +10,7 @@ import asyncio
 import logging
 import random
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -29,15 +30,27 @@ class JobFailure(Exception):
         self.retryable = retryable
 
 
+@dataclass(frozen=True)
+class Committed:
+    """Returned by handlers whose result reducer already completed the job atomically."""
+
+    result_ref: str
+
+
 class JobHandler(Protocol):
     kind: str
 
-    async def run(self, job: JobV1, gateway: SpacetimeGateway) -> str:
-        """Return a short result reference, or raise JobFailure."""
+    async def run(self, job: JobV1, gateway: SpacetimeGateway) -> str | Committed:
+        """Return a short result reference (runner completes the job), a
+        `Committed` marker, or raise JobFailure."""
         ...
 
 
 class Worker:
+    @property
+    def kinds(self) -> list[str]:
+        return sorted(self._handlers)
+
     def __init__(
         self,
         gateway: SpacetimeGateway,
@@ -77,8 +90,10 @@ class Worker:
 
     async def _process(self, job: JobV1) -> bool:
         async with self._semaphore:
+            handler = self._handlers[job.kind]
+            lease_seconds = int(getattr(handler, "lease_seconds", self._lease_seconds))
             try:
-                await self._gateway.claim_job(job.job_id, self._lease_seconds)
+                await self._gateway.claim_job(job.job_id, lease_seconds)
             except ReducerRejected as exc:
                 if exc.code in _LOST_RACE:
                     return False
@@ -89,22 +104,28 @@ class Worker:
                 return False  # e.g. attempts exhausted → marked failed by the reducer
 
             log.info("job %s claimed kind=%s attempt=%s", leased.job_id, leased.kind, leased.attempt_count)
-            handler = self._handlers[leased.kind]
             try:
-                result_ref = await asyncio.wait_for(
-                    handler.run(leased, self._gateway), timeout=self._lease_seconds * 0.8
-                )
+                result_ref = await asyncio.wait_for(handler.run(leased, self._gateway), timeout=lease_seconds * 0.8)
             except JobFailure as exc:
                 await self._fail(leased, exc.code, exc.retryable)
             except TimeoutError:
                 await self._fail(leased, "handler_timeout", True)
             except GatewayUnavailable:
                 await self._fail(leased, "state_unavailable", True)
+            except ReducerRejected as exc:
+                # e.g. stale_generation / lease_expired from an atomic result reducer
+                if exc.code in _LOST_RACE or exc.code == "stale_generation":
+                    log.warning("job %s result rejected: %s", leased.job_id, exc.code)
+                else:
+                    await self._fail(leased, exc.code, False)
             except Exception:
                 log.exception("job %s handler crashed", leased.job_id)
                 await self._fail(leased, "internal_error", True)
             else:
-                await self._commit(leased, result_ref)
+                if isinstance(result_ref, Committed):
+                    log.info("job %s committed: %s", leased.job_id, result_ref.result_ref)
+                else:
+                    await self._commit(leased, result_ref)
             return True
 
     async def _confirm_lease(self, job_id: int) -> JobV1 | None:

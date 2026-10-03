@@ -1,7 +1,7 @@
 import { SenderError, t } from 'spacetimedb/server';
 import { Timestamp, type Identity } from 'spacetimedb';
 import spacetimedb from './schema';
-import { requireConsumer, requireService, type Ctx } from './auth';
+import { isService, requireConsumer, requireService, type Ctx } from './auth';
 
 /** Job states (PRD §9): queued → running → succeeded, with retry_wait and failed. */
 export const JOB_STATUS = {
@@ -15,7 +15,13 @@ export const JOB_STATUS = {
 export const JOB_KIND = {
   refreshRecommendations: 'refresh_recommendations',
   backendCheck: 'backend_check',
+  ingestMarket: 'ingest_market',
 } as const;
+
+const KNOWN_JOB_KINDS: readonly string[] = Object.values(JOB_KIND);
+const ACTIVE_STATUSES = ['queued', 'retry_wait', 'running'] as const;
+/** Terminal system (market) jobs kept for inspection; older ones are pruned. */
+const SYSTEM_JOB_RETENTION = 50;
 
 const MAX_ACTIVE_COMMANDS_PER_OWNER = 3;
 const DEFAULT_MAX_ATTEMPTS = 5;
@@ -29,7 +35,7 @@ const ERROR_CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
 const MICROS_PER_SECOND = 1_000_000n;
 
-function plusSeconds(ts: Timestamp, seconds: number): Timestamp {
+export function plusSeconds(ts: Timestamp, seconds: number): Timestamp {
   return new Timestamp(ts.microsSinceUnixEpoch + BigInt(seconds) * MICROS_PER_SECOND);
 }
 
@@ -97,6 +103,52 @@ export function enqueueRecommendationRefresh(ctx: Ctx, owner: Identity, profileV
   }
   insertJob(ctx, owner, JOB_KIND.refreshRecommendations, `refresh:v${profileVersion}`, profileVersion, '{}');
 }
+
+/**
+ * Enqueues one shared market-ingestion job unless one is already active
+ * (scheduled ticks and manual requests coalesce). Owned by the database
+ * identity, so it never appears in any user's `my_jobs`.
+ */
+export function enqueueMarketIngest(ctx: Ctx, reason: string) {
+  for (const status of ACTIVE_STATUSES) {
+    for (const _row of ctx.db.job.by_status_kind.filter([status, JOB_KIND.ingestMarket])) return;
+  }
+  const owner = ctx.databaseIdentity;
+  const terminal = [...ctx.db.job.owner.filter(owner)]
+    .filter(j => j.kind === JOB_KIND.ingestMarket && !isActive(j.status))
+    .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch));
+  for (const old of terminal.slice(SYSTEM_JOB_RETENTION - 1)) ctx.db.job.jobId.delete(old.jobId);
+
+  const row = insertJob(
+    ctx,
+    owner,
+    JOB_KIND.ingestMarket,
+    `ingest:${ctx.timestamp.microsSinceUnixEpoch}`,
+    0,
+    JSON.stringify({ reason })
+  );
+  ctx.db.job.jobId.update({ ...row, maxAttempts: 3 });
+}
+
+/** Service or admin: run market ingestion now (coalesces with any active run). */
+export const requestMarketIngest = spacetimedb.reducer(ctx => {
+  if (!isService(ctx, ctx.sender) && !ctx.db.moduleAdmin.identity.find(ctx.sender)) {
+    throw new SenderError('not_authorized_service');
+  }
+  enqueueMarketIngest(ctx, 'manual');
+});
+
+/** Worker declares which job kinds it handles; unsupported kinds are never offered to it. */
+export const registerWorker = spacetimedb.reducer({ kinds: t.array(t.string()) }, (ctx, { kinds }) => {
+  requireService(ctx);
+  const unique = [...new Set(kinds)];
+  if (unique.length === 0 || unique.some(k => !KNOWN_JOB_KINDS.includes(k))) {
+    throw new SenderError('invalid_job_kinds');
+  }
+  const row = { identity: ctx.sender, kinds: unique, registeredAt: ctx.timestamp };
+  if (ctx.db.workerRegistration.identity.find(ctx.sender)) ctx.db.workerRegistration.identity.update(row);
+  else ctx.db.workerRegistration.insert(row);
+});
 
 /**
  * User command: ask the worker to prove the backend round trip. The worker
@@ -169,7 +221,7 @@ export const claimJob = spacetimedb.reducer(
  * `attempt` is the fencing token: a worker whose lease was reclaimed holds a
  * stale attempt number and cannot commit.
  */
-function requireLease(ctx: Ctx, jobId: bigint, attempt: number) {
+export function requireLease(ctx: Ctx, jobId: bigint, attempt: number) {
   const row = ctx.db.job.jobId.find(jobId);
   if (!row) throw new SenderError('job_not_found');
   const holdsLease =

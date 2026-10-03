@@ -21,6 +21,7 @@ class Settings(BaseSettings):
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        env_ignore_empty=True,  # `KEY=` in .env means "unset", not an empty secret
     )
 
     app_env: Literal["development", "test", "demo", "production"] = "development"
@@ -40,8 +41,15 @@ class Settings(BaseSettings):
     worker_lease_seconds: int = Field(default=30, ge=5, le=300)
     worker_concurrency: int = Field(default=2, ge=1, le=16)
 
-    # Provider credentials (not used in this phase; validated when present).
+    # Market data (Finnhub). Backend-only; never exposed to mobile.
     finnhub_api_key: SecretStr | None = None
+    finnhub_base_url: AnyHttpUrl = AnyHttpUrl("https://finnhub.io/api/v1")
+    finnhub_calls_per_minute: int = Field(default=50, ge=1, le=900)
+    finnhub_burst: int = Field(default=20, ge=1, le=30)  # stays under the documented 30 calls/s cap
+    finnhub_max_retries: int = Field(default=3, ge=0, le=6)
+    market_ingest_enabled: bool = True
+
+    # Providers for later phases (validated when present).
     jev_api_key: SecretStr | None = None
     jev_base_url: AnyHttpUrl | None = None
     openai_api_key: SecretStr | None = None

@@ -108,6 +108,8 @@ before(async () => {
   svc2 = await connect();
   grantService(svc.identityHex, 'test-worker-1');
   grantService(svc2.identityHex, 'test-worker-2');
+  await svc.conn.reducers.registerWorker({ kinds: ['backend_check'] });
+  await svc2.conn.reducers.registerWorker({ kinds: ['backend_check'] });
   await subscribe(a.conn, USER_QUERIES);
   await subscribe(b.conn, USER_QUERIES);
   await subscribe(svc.conn, ['SELECT * FROM worker_jobs', 'SELECT * FROM worker_job_profiles']);

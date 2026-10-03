@@ -10,6 +10,43 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const BarInput = __t.object("BarInput", {
+  ticker: __t.string(),
+  sessionDate: __t.string(),
+  openMicros: __t.option(__t.i64()),
+  highMicros: __t.option(__t.i64()),
+  lowMicros: __t.option(__t.i64()),
+  closeMicros: __t.i64(),
+  volume: __t.option(__t.u64()),
+  adjusted: __t.bool(),
+  source: __t.string(),
+});
+export type BarInput = __Infer<typeof BarInput>;
+
+export const CapabilityInput = __t.object("CapabilityInput", {
+  key: __t.string(),
+  provider: __t.string(),
+  capability: __t.string(),
+  available: __t.bool(),
+  detail: __t.string(),
+});
+export type CapabilityInput = __Infer<typeof CapabilityInput>;
+
+export const DailyBar = __t.object("DailyBar", {
+  id: __t.u64(),
+  ticker: __t.string(),
+  sessionDate: __t.string(),
+  openMicros: __t.option(__t.i64()),
+  highMicros: __t.option(__t.i64()),
+  lowMicros: __t.option(__t.i64()),
+  closeMicros: __t.i64(),
+  volume: __t.option(__t.u64()),
+  adjusted: __t.bool(),
+  source: __t.string(),
+  ingestedAt: __t.timestamp(),
+});
+export type DailyBar = __Infer<typeof DailyBar>;
+
 export const InvestmentProfile = __t.object("InvestmentProfile", {
   owner: __t.identity(),
   schemaVersion: __t.u16(),
@@ -45,6 +82,45 @@ export const Job = __t.object("Job", {
 });
 export type Job = __Infer<typeof Job>;
 
+export const MarketGeneration = __t.object("MarketGeneration", {
+  scope: __t.string(),
+  generation: __t.u64(),
+  jobId: __t.u64(),
+  asOf: __t.timestamp(),
+  publishedAt: __t.timestamp(),
+  marketOpen: __t.bool(),
+  marketSession: __t.string(),
+  marketStatusAt: __t.timestamp(),
+  lastCompletedSession: __t.string(),
+  quoteCount: __t.u32(),
+  signalCount: __t.u32(),
+  algorithmVersion: __t.string(),
+  provider: __t.string(),
+});
+export type MarketGeneration = __Infer<typeof MarketGeneration>;
+
+export const MarketQuote = __t.object("MarketQuote", {
+  ticker: __t.string(),
+  generation: __t.u64(),
+  priceMicros: __t.i64(),
+  previousCloseMicros: __t.i64(),
+  openMicros: __t.i64(),
+  highMicros: __t.i64(),
+  lowMicros: __t.i64(),
+  providerTime: __t.timestamp(),
+  ingestedAt: __t.timestamp(),
+  publishedAt: __t.timestamp(),
+  source: __t.string(),
+});
+export type MarketQuote = __Infer<typeof MarketQuote>;
+
+export const MarketSchedule = __t.object("MarketSchedule", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  intervalSeconds: __t.u32(),
+});
+export type MarketSchedule = __Infer<typeof MarketSchedule>;
+
 export const ModuleAdmin = __t.object("ModuleAdmin", {
   identity: __t.identity(),
   addedAt: __t.timestamp(),
@@ -73,12 +149,145 @@ export const ProfileBranding = __t.object("ProfileBranding", {
 });
 export type ProfileBranding = __Infer<typeof ProfileBranding>;
 
+export const ProviderCapability = __t.object("ProviderCapability", {
+  key: __t.string(),
+  provider: __t.string(),
+  capability: __t.string(),
+  available: __t.bool(),
+  detail: __t.string(),
+  checkedAt: __t.timestamp(),
+});
+export type ProviderCapability = __Infer<typeof ProviderCapability>;
+
+export const QuoteInput = __t.object("QuoteInput", {
+  ticker: __t.string(),
+  priceMicros: __t.i64(),
+  previousCloseMicros: __t.i64(),
+  openMicros: __t.i64(),
+  highMicros: __t.i64(),
+  lowMicros: __t.i64(),
+  providerTime: __t.timestamp(),
+  ingestedAt: __t.timestamp(),
+  source: __t.string(),
+});
+export type QuoteInput = __Infer<typeof QuoteInput>;
+
+export const ServiceConfig = __t.object("ServiceConfig", {
+  key: __t.string(),
+  boolValue: __t.bool(),
+  updatedAt: __t.timestamp(),
+});
+export type ServiceConfig = __Infer<typeof ServiceConfig>;
+
 export const ServiceIdentity = __t.object("ServiceIdentity", {
   identity: __t.identity(),
   label: __t.string(),
   addedAt: __t.timestamp(),
 });
 export type ServiceIdentity = __Infer<typeof ServiceIdentity>;
+
+export const SignalFeature = __t.object("SignalFeature", {
+  name: __t.string(),
+  available: __t.bool(),
+  raw: __t.option(__t.f64()),
+  normalized: __t.option(__t.f64()),
+  weight: __t.f64(),
+  sampleCount: __t.u32(),
+  baselineCount: __t.u32(),
+  reason: __t.option(__t.string()),
+});
+export type SignalFeature = __Infer<typeof SignalFeature>;
+
+export const SignalInput = __t.object("SignalInput", {
+  ticker: __t.string(),
+  sessionDate: __t.string(),
+  status: __t.string(),
+  trendScore: __t.option(__t.f64()),
+  composite: __t.option(__t.f64()),
+  coverage: __t.f64(),
+  coverageScope: __t.string(),
+  benchmark: __t.string(),
+  historySessions: __t.u32(),
+  requiredSessions: __t.u32(),
+  dayReturn: __t.option(__t.f64()),
+  benchmarkDayReturn: __t.option(__t.f64()),
+  relativeDayReturn: __t.option(__t.f64()),
+  get features() {
+    return __t.array(SignalFeature);
+  },
+  notes: __t.array(__t.string()),
+});
+export type SignalInput = __Infer<typeof SignalInput>;
+
+export const Stock = __t.object("Stock", {
+  ticker: __t.string(),
+  name: __t.string(),
+  exchange: __t.string(),
+  industry: __t.string(),
+  sector: __t.string(),
+  currency: __t.string(),
+  kind: __t.string(),
+  benchmark: __t.string(),
+  displayOrder: __t.u16(),
+  active: __t.bool(),
+  updatedAt: __t.timestamp(),
+});
+export type Stock = __Infer<typeof Stock>;
+
+export const StockInput = __t.object("StockInput", {
+  ticker: __t.string(),
+  name: __t.string(),
+  exchange: __t.string(),
+  industry: __t.string(),
+  sector: __t.string(),
+  currency: __t.string(),
+  kind: __t.string(),
+  benchmark: __t.string(),
+  displayOrder: __t.u16(),
+});
+export type StockInput = __Infer<typeof StockInput>;
+
+export const TrendSignal = __t.object("TrendSignal", {
+  ticker: __t.string(),
+  generation: __t.u64(),
+  algorithmVersion: __t.string(),
+  sessionDate: __t.string(),
+  status: __t.string(),
+  trendScore: __t.option(__t.f64()),
+  composite: __t.option(__t.f64()),
+  coverage: __t.f64(),
+  coverageScope: __t.string(),
+  benchmark: __t.string(),
+  historySessions: __t.u32(),
+  requiredSessions: __t.u32(),
+  dayReturn: __t.option(__t.f64()),
+  benchmarkDayReturn: __t.option(__t.f64()),
+  relativeDayReturn: __t.option(__t.f64()),
+  get features() {
+    return __t.array(SignalFeature);
+  },
+  notes: __t.array(__t.string()),
+  asOf: __t.timestamp(),
+  publishedAt: __t.timestamp(),
+});
+export type TrendSignal = __Infer<typeof TrendSignal>;
+
+export const TrendSignalHistory = __t.object("TrendSignalHistory", {
+  id: __t.u64(),
+  ticker: __t.string(),
+  generation: __t.u64(),
+  algorithmVersion: __t.string(),
+  sessionDate: __t.string(),
+  status: __t.string(),
+  trendScore: __t.option(__t.f64()),
+  coverage: __t.f64(),
+  get features() {
+    return __t.array(SignalFeature);
+  },
+  asOf: __t.timestamp(),
+  publishedAt: __t.timestamp(),
+});
+export type TrendSignalHistory = __Infer<typeof TrendSignalHistory>;
 
 export const UserAccount = __t.object("UserAccount", {
   identity: __t.identity(),
@@ -89,9 +298,19 @@ export const UserAccount = __t.object("UserAccount", {
 });
 export type UserAccount = __Infer<typeof UserAccount>;
 
+export const WorkerDailyBars = __t.object("WorkerDailyBars", {});
+export type WorkerDailyBars = __Infer<typeof WorkerDailyBars>;
+
 export const WorkerJobProfiles = __t.object("WorkerJobProfiles", {});
 export type WorkerJobProfiles = __Infer<typeof WorkerJobProfiles>;
 
 export const WorkerJobs = __t.object("WorkerJobs", {});
 export type WorkerJobs = __Infer<typeof WorkerJobs>;
+
+export const WorkerRegistration = __t.object("WorkerRegistration", {
+  identity: __t.identity(),
+  kinds: __t.array(__t.string()),
+  registeredAt: __t.timestamp(),
+});
+export type WorkerRegistration = __Infer<typeof WorkerRegistration>;
 

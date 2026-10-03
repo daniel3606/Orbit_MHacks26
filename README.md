@@ -70,6 +70,19 @@ and starts Metro. After the first build, `make mobile-start` is enough.
 Check the backend: `curl localhost:8000/health` (liveness) and `curl localhost:8000/ready` (SpacetimeDB reachable
 and the worker token allowlisted).
 
+### Market data (Phase 2)
+
+- Put `FINNHUB_API_KEY` in `backend/.env` (backend only). `make worker` then registers the `ingest_market` job kind.
+- The module schedules one shared `ingest_market` job every 300 s (`market_schedule`). For an existing database,
+  create or change the schedule once as admin:
+  `spacetime call --no-config orbit-dev --server local configure_market_schedule 300`.
+- `make ingest-now` runs ingestion immediately. Overlapping requests coalesce into one active job.
+- Universe: [backend/app/config/universe.json](backend/app/config/universe.json) lists 11 equities, each with a
+  SPDR sector ETF benchmark, and SPY as the fallback. Settings: [backend/app/signals/config.py](backend/app/signals/config.py)
+  (`trend-v1.0.0`).
+- Fixture data is rejected unless an admin runs `set_service_flag "allow_fixture_data" true`. Only the tests do
+  this, and only on `orbit-test`.
+
 ### Physical iPhone
 
 `localhost` on the phone is the phone. In development the app derives the SpacetimeDB address from the Metro host
@@ -84,12 +97,16 @@ The in-app **Connection diagnostics** screen shows the resolved address and runt
 make check
 ```
 
-- `make test-spacetime` — republishes a throwaway `orbit-test` database (data wiped) and runs 17 WebSocket SDK
-  integration tests: subscription-then-mutation, two-identity isolation, validation, optimistic versioning,
-  session restore, worker gating, idempotent enqueue, claim/complete, duplicate completion, backoff, lease-expiry
-  fencing, revocation.
-- `make test-backend` — gateway/settings/contract unit tests plus a real-server worker round trip against
-  `orbit-test` (skipped automatically if the server or database is absent).
+- `make test-spacetime` — republishes a throwaway `orbit-test` database (data wiped) and runs 25 WebSocket SDK
+  integration tests:
+  - subscription-then-mutation, two-identity isolation, validation, optimistic versioning, session restore
+  - worker gating, idempotent enqueue, claim/complete, duplicate completion, backoff, lease-expiry fencing, revocation
+  - market publication authorization, stale/out-of-order/invalid snapshots
+  - Python worker → SpacetimeDB → subscribed client (labeled fixture provider)
+- `make test-backend` — unit tests (hand-calculated features, prior-only normalization, coverage, provider retry,
+  rate limits and deduplication, calendar) plus real-server worker round trips against `orbit-test`. The
+  real-server tests are skipped automatically if the server or database is absent.
+- `make test-live` — opt-in checks against the real Finnhub API with your key. Kept separate from fixture tests.
 - `make typecheck` — `tsc` for module, tests and app; `expo lint`; app ↔ module preference-contract check; `mypy --strict`.
 
 ## Changing the module

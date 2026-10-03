@@ -37,20 +37,33 @@ import {
 import ClaimJobReducer from "./claim_job_reducer";
 import CompleteJobReducer from "./complete_job_reducer";
 import CompleteOnboardingReducer from "./complete_onboarding_reducer";
+import ConfigureMarketScheduleReducer from "./configure_market_schedule_reducer";
 import FailJobReducer from "./fail_job_reducer";
 import GrantServiceIdentityReducer from "./grant_service_identity_reducer";
+import PublishMarketSnapshotReducer from "./publish_market_snapshot_reducer";
+import PublishProviderCapabilitiesReducer from "./publish_provider_capabilities_reducer";
+import RegisterWorkerReducer from "./register_worker_reducer";
 import RequestBackendCheckReducer from "./request_backend_check_reducer";
+import RequestMarketIngestReducer from "./request_market_ingest_reducer";
 import RevokeServiceIdentityReducer from "./revoke_service_identity_reducer";
+import SetServiceFlagReducer from "./set_service_flag_reducer";
 import UpdatePreferencesReducer from "./update_preferences_reducer";
+import UpsertStocksReducer from "./upsert_stocks_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import MarketGenerationRow from "./market_generation_table";
+import MarketQuoteRow from "./market_quote_table";
 import MyAccountRow from "./my_account_table";
 import MyBrandingRow from "./my_branding_table";
 import MyJobsRow from "./my_jobs_table";
 import MyProfileRow from "./my_profile_table";
 import MyServiceGrantRow from "./my_service_grant_table";
+import ProviderCapabilityRow from "./provider_capability_table";
+import StockRow from "./stock_table";
+import TrendSignalRow from "./trend_signal_table";
+import WorkerDailyBarsRow from "./worker_daily_bars_table";
 import WorkerJobProfilesRow from "./worker_job_profiles_table";
 import WorkerJobsRow from "./worker_jobs_table";
 
@@ -58,6 +71,64 @@ import WorkerJobsRow from "./worker_jobs_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  marketGeneration: __table({
+    name: 'market_generation',
+    indexes: [
+      { accessor: 'scope', name: 'market_generation_scope_idx_btree', algorithm: 'btree', columns: [
+        'scope',
+      ] },
+    ],
+    constraints: [
+      { name: 'market_generation_scope_key', constraint: 'unique', columns: ['scope'] },
+    ],
+  }, MarketGenerationRow),
+  marketQuote: __table({
+    name: 'market_quote',
+    indexes: [
+      { accessor: 'ticker', name: 'market_quote_ticker_idx_btree', algorithm: 'btree', columns: [
+        'ticker',
+      ] },
+    ],
+    constraints: [
+      { name: 'market_quote_ticker_key', constraint: 'unique', columns: ['ticker'] },
+    ],
+  }, MarketQuoteRow),
+  providerCapability: __table({
+    name: 'provider_capability',
+    indexes: [
+      { accessor: 'key', name: 'provider_capability_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
+      ] },
+    ],
+    constraints: [
+      { name: 'provider_capability_key_key', constraint: 'unique', columns: ['key'] },
+    ],
+  }, ProviderCapabilityRow),
+  stock: __table({
+    name: 'stock',
+    indexes: [
+      { accessor: 'active', name: 'stock_active_idx_btree', algorithm: 'btree', columns: [
+        'active',
+      ] },
+      { accessor: 'ticker', name: 'stock_ticker_idx_btree', algorithm: 'btree', columns: [
+        'ticker',
+      ] },
+    ],
+    constraints: [
+      { name: 'stock_ticker_key', constraint: 'unique', columns: ['ticker'] },
+    ],
+  }, StockRow),
+  trendSignal: __table({
+    name: 'trend_signal',
+    indexes: [
+      { accessor: 'ticker', name: 'trend_signal_ticker_idx_btree', algorithm: 'btree', columns: [
+        'ticker',
+      ] },
+    ],
+    constraints: [
+      { name: 'trend_signal_ticker_key', constraint: 'unique', columns: ['ticker'] },
+    ],
+  }, TrendSignalRow),
   myAccount: __table({
     name: 'my_account',
     indexes: [
@@ -93,6 +164,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyServiceGrantRow),
+  workerDailyBars: __table({
+    name: 'worker_daily_bars',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerDailyBarsRow),
   workerJobProfiles: __table({
     name: 'worker_job_profiles',
     indexes: [
@@ -114,11 +192,18 @@ const reducersSchema = __reducers(
   __reducerSchema("claim_job", ClaimJobReducer),
   __reducerSchema("complete_job", CompleteJobReducer),
   __reducerSchema("complete_onboarding", CompleteOnboardingReducer),
+  __reducerSchema("configure_market_schedule", ConfigureMarketScheduleReducer),
   __reducerSchema("fail_job", FailJobReducer),
   __reducerSchema("grant_service_identity", GrantServiceIdentityReducer),
+  __reducerSchema("publish_market_snapshot", PublishMarketSnapshotReducer),
+  __reducerSchema("publish_provider_capabilities", PublishProviderCapabilitiesReducer),
+  __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("request_backend_check", RequestBackendCheckReducer),
+  __reducerSchema("request_market_ingest", RequestMarketIngestReducer),
   __reducerSchema("revoke_service_identity", RevokeServiceIdentityReducer),
+  __reducerSchema("set_service_flag", SetServiceFlagReducer),
   __reducerSchema("update_preferences", UpdatePreferencesReducer),
+  __reducerSchema("upsert_stocks", UpsertStocksReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

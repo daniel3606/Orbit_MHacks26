@@ -1,0 +1,30 @@
+{
+  "version": "universe-v1",
+  "notes": "Small configurable MVP universe. `sector` uses Orbit onboarding vocabulary (server config, GICS-based). Each equity's relative features use its SPDR sector ETF; SPY is the documented broad-market fallback.",
+  "fallback_benchmark": "SPY",
+  "benchmarks": [
+    { "ticker": "SPY", "name": "SPDR S&P 500 ETF Trust", "sector": "" },
+    { "ticker": "XLK", "name": "Technology Select Sector SPDR Fund", "sector": "technology" },
+    { "ticker": "XLV", "name": "Health Care Select Sector SPDR Fund", "sector": "healthcare" },
+    { "ticker": "XLF", "name": "Financial Select Sector SPDR Fund", "sector": "financials" },
+    { "ticker": "XLY", "name": "Consumer Discretionary Select Sector SPDR Fund", "sector": "consumer_discretionary" },
+    { "ticker": "XLP", "name": "Consumer Staples Select Sector SPDR Fund", "sector": "consumer_staples" },
+    { "ticker": "XLE", "name": "Energy Select Sector SPDR Fund", "sector": "energy" },
+    { "ticker": "XLI", "name": "Industrial Select Sector SPDR Fund", "sector": "industrials" },
+    { "ticker": "XLC", "name": "Communication Services Select Sector SPDR Fund", "sector": "communication_services" },
+    { "ticker": "XLU", "name": "Utilities Select Sector SPDR Fund", "sector": "utilities" }
+  ],
+  "equities": [
+    { "ticker": "AAPL", "sector": "technology", "benchmark": "XLK" },
+    { "ticker": "MSFT", "sector": "technology", "benchmark": "XLK" },
+    { "ticker": "NVDA", "sector": "technology", "benchmark": "XLK" },
+    { "ticker": "JNJ", "sector": "healthcare", "benchmark": "XLV" },
+    { "ticker": "JPM", "sector": "financials", "benchmark": "XLF" },
+    { "ticker": "AMZN", "sector": "consumer_discretionary", "benchmark": "XLY" },
+    { "ticker": "KO", "sector": "consumer_staples", "benchmark": "XLP" },
+    { "ticker": "XOM", "sector": "energy", "benchmark": "XLE" },
+    { "ticker": "CAT", "sector": "industrials", "benchmark": "XLI" },
+    { "ticker": "GOOGL", "sector": "communication_services", "benchmark": "XLC" },
+    { "ticker": "NEE", "sector": "utilities", "benchmark": "XLU" }
+  ]
+}

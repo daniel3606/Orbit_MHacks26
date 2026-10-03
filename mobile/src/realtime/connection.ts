@@ -70,6 +70,87 @@ export type Diagnostics = {
   sessionPersisted: boolean | null;
 };
 
+export type StockVM = {
+  ticker: string;
+  name: string;
+  exchange: string;
+  industry: string;
+  sector: string;
+  kind: 'equity' | 'benchmark';
+  benchmark: string;
+  displayOrder: number;
+};
+export type QuoteVM = {
+  ticker: string;
+  price: number; // display only (fixed-point micros converted)
+  previousClose: number;
+  providerTime: Date;
+  publishedAt: Date;
+  source: string;
+};
+export type FeatureVM = {
+  name: string;
+  available: boolean;
+  raw: number | null;
+  normalized: number | null;
+  weight: number;
+  baselineCount: number;
+  reason: string | null;
+};
+export type SignalVM = {
+  ticker: string;
+  status: string;
+  trendScore: number | null;
+  coverage: number;
+  coverageScope: string;
+  benchmark: string;
+  sessionDate: string;
+  historySessions: number;
+  requiredSessions: number;
+  dayReturn: number | null;
+  benchmarkDayReturn: number | null;
+  relativeDayReturn: number | null;
+  features: FeatureVM[];
+  notes: string[];
+  algorithmVersion: string;
+};
+export type GenerationVM = {
+  generation: string;
+  publishedAt: Date;
+  marketOpen: boolean;
+  marketSession: string;
+  marketStatusAt: Date;
+  lastCompletedSession: string;
+  provider: string;
+  algorithmVersion: string;
+};
+export type CapabilityVM = { key: string; capability: string; available: boolean; detail: string; checkedAt: Date };
+export type MarketVM = {
+  /** A screen currently holds the market subscription. */
+  subscribed: boolean;
+  /** Authoritative market rows received for the current subscription. */
+  applied: boolean;
+  error: string | null;
+  stocks: StockVM[];
+  quotes: Record<string, QuoteVM>;
+  signals: Record<string, SignalVM>;
+  generation: GenerationVM | null;
+  capabilities: CapabilityVM[];
+};
+
+const EMPTY_MARKET: MarketVM = {
+  subscribed: false,
+  applied: false,
+  error: null,
+  stocks: [],
+  quotes: {},
+  signals: {},
+  generation: null,
+  capabilities: [],
+};
+
+const micros = (v: bigint) => Number(v) / 1_000_000;
+
 export type RealtimeSnapshot = {
   status: ConnectionStatus;
   /** Authoritative state was received at least once for the current identity. */
@@ -82,6 +163,7 @@ export type RealtimeSnapshot = {
   profile: ProfileVM | null;
   branding: BrandingVM | null;
   jobs: JobVM[];
+  market: MarketVM;
   diagnostics: Diagnostics;
 };
 
@@ -101,6 +183,7 @@ function initialSnapshot(): RealtimeSnapshot {
     profile: null,
     branding: null,
     jobs: [],
+    market: EMPTY_MARKET,
     diagnostics: {
       uri: config.spacetimeUri,
       uriSource: config.spacetimeUriSource,
@@ -130,6 +213,8 @@ class ConnectionManager {
   private recomputeQueued = false;
   private detachTableListeners: (() => void) | null = null;
   private jobObservations = new Map<string, { updatedAtMicros: bigint; observedAt: Date }>();
+  private marketRefs = 0;
+  private marketHandle: { unsubscribe(): void; isActive(): boolean } | null = null;
 
   // ---- store plumbing (useSyncExternalStore) ----
 
@@ -265,6 +350,7 @@ class ConnectionManager {
           { status: 'ready', hasSynced: true, stale: false, error: null },
           { subscriptionAppliedAt: new Date(), reconnectAttempt: 0 }
         );
+        if (this.marketRefs > 0) this.subscribeMarket(conn, isCurrent);
       })
       .onError(ctx => {
         if (!isCurrent()) return;
@@ -278,7 +364,18 @@ class ConnectionManager {
       if (isCurrent()) this.queueRecompute();
     };
     const detach: (() => void)[] = [];
-    for (const table of [conn.db.myAccount, conn.db.myProfile, conn.db.myBranding, conn.db.myJobs] as const) {
+    const tables = [
+      conn.db.myAccount,
+      conn.db.myProfile,
+      conn.db.myBranding,
+      conn.db.myJobs,
+      conn.db.stock,
+      conn.db.marketQuote,
+      conn.db.trendSignal,
+      conn.db.marketGeneration,
+      conn.db.providerCapability,
+    ] as const;
+    for (const table of tables) {
       table.onInsert(onChange);
       table.onDelete(onChange);
       detach.push(() => {
@@ -286,7 +383,7 @@ class ConnectionManager {
         table.removeOnDelete(onChange);
       });
     }
-    for (const table of [conn.db.myAccount, conn.db.myProfile, conn.db.myBranding, conn.db.myJobs] as const) {
+    for (const table of tables) {
       table.onUpdate(onChange);
       detach.push(() => table.removeOnUpdate(onChange));
     }
@@ -334,8 +431,11 @@ class ConnectionManager {
       })
       .sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime());
 
+    const market: MarketVM = this.marketRefs > 0 ? this.projectMarket(conn) : EMPTY_MARKET;
+
     this.patch(
       {
+        market,
         profile: p
           ? {
               profileVersion: p.profileVersion,
@@ -358,6 +458,130 @@ class ConnectionManager {
       },
       { lastEventAt: new Date() }
     );
+  }
+
+  private projectMarket(conn: DbConnection): MarketVM {
+    const g = [...conn.db.marketGeneration.iter()][0];
+    const quotes: Record<string, QuoteVM> = {};
+    for (const q of conn.db.marketQuote.iter()) {
+      quotes[q.ticker] = {
+        ticker: q.ticker,
+        price: micros(q.priceMicros),
+        previousClose: micros(q.previousCloseMicros),
+        providerTime: toDate(q.providerTime),
+        publishedAt: toDate(q.publishedAt),
+        source: q.source,
+      };
+    }
+    const signals: Record<string, SignalVM> = {};
+    for (const s of conn.db.trendSignal.iter()) {
+      signals[s.ticker] = {
+        ticker: s.ticker,
+        status: s.status,
+        trendScore: s.trendScore ?? null,
+        coverage: s.coverage,
+        coverageScope: s.coverageScope,
+        benchmark: s.benchmark,
+        sessionDate: s.sessionDate,
+        historySessions: s.historySessions,
+        requiredSessions: s.requiredSessions,
+        dayReturn: s.dayReturn ?? null,
+        benchmarkDayReturn: s.benchmarkDayReturn ?? null,
+        relativeDayReturn: s.relativeDayReturn ?? null,
+        features: s.features.map(f => ({
+          name: f.name,
+          available: f.available,
+          raw: f.raw ?? null,
+          normalized: f.normalized ?? null,
+          weight: f.weight,
+          baselineCount: f.baselineCount,
+          reason: f.reason ?? null,
+        })),
+        notes: [...s.notes],
+        algorithmVersion: s.algorithmVersion,
+      };
+    }
+    return {
+      subscribed: true,
+      applied: this.snapshot.market.applied,
+      error: this.snapshot.market.error,
+      stocks: [...conn.db.stock.iter()]
+        .filter(s => s.active)
+        .map(s => ({
+          ticker: s.ticker,
+          name: s.name,
+          exchange: s.exchange,
+          industry: s.industry,
+          sector: s.sector,
+          kind: s.kind === 'benchmark' ? ('benchmark' as const) : ('equity' as const),
+          benchmark: s.benchmark,
+          displayOrder: s.displayOrder,
+        }))
+        .sort((a, b) => a.displayOrder - b.displayOrder),
+      quotes,
+      signals,
+      generation: g
+        ? {
+            generation: g.generation.toString(),
+            publishedAt: toDate(g.publishedAt),
+            marketOpen: g.marketOpen,
+            marketSession: g.marketSession,
+            marketStatusAt: toDate(g.marketStatusAt),
+            lastCompletedSession: g.lastCompletedSession,
+            provider: g.provider,
+            algorithmVersion: g.algorithmVersion,
+          }
+        : null,
+      capabilities: [...conn.db.providerCapability.iter()].map(c => ({
+        key: c.key,
+        capability: c.capability,
+        available: c.available,
+        detail: c.detail,
+        checkedAt: toDate(c.checkedAt),
+      })),
+    };
+  }
+
+  /** Screen-scoped subscription to shared market projections (never the history tables). */
+  private subscribeMarket(conn: DbConnection, isCurrent: () => boolean) {
+    if (this.marketHandle?.isActive()) return;
+    this.patch({ market: { ...this.snapshot.market, subscribed: true, applied: false, error: null } });
+    this.marketHandle = conn
+      .subscriptionBuilder()
+      .onApplied(() => {
+        if (!isCurrent() || this.marketRefs === 0) return;
+        this.patch({ market: { ...this.snapshot.market, applied: true, error: null } });
+        this.recompute();
+      })
+      .onError(ctx => {
+        if (!isCurrent()) return;
+        this.patch({ market: { ...this.snapshot.market, error: ctx.event?.message ?? 'subscription_failed' } });
+      })
+      .subscribe([tables.stock, tables.marketQuote, tables.trendSignal, tables.marketGeneration, tables.providerCapability]);
+  }
+
+  /** Call when a market screen gains focus; returns the release function. */
+  acquireMarket(): () => void {
+    this.marketRefs += 1;
+    if (this.marketRefs === 1 && this.conn && this.snapshot.status === 'ready') {
+      const gen = this.generation;
+      this.subscribeMarket(this.conn, () => gen === this.generation);
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.marketRefs -= 1;
+      if (this.marketRefs === 0) {
+        try {
+          if (this.marketHandle?.isActive()) this.marketHandle.unsubscribe();
+        } catch {
+          // connection already gone
+        }
+        this.marketHandle = null;
+        this.patch({ market: EMPTY_MARKET });
+      }
+    };
   }
 
   private scheduleReconnect(reason: string) {
@@ -393,6 +617,7 @@ class ConnectionManager {
     this.generation++;
     this.detachTableListeners?.();
     this.detachTableListeners = null;
+    this.marketHandle = null; // dies with the connection; re-subscribed after reconnect
     const conn = this.conn;
     this.conn = null;
     if (conn) {

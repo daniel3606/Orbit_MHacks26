@@ -1,5 +1,6 @@
 import { t } from 'spacetimedb/server';
 import spacetimedb, {
+  dailyBar,
   investmentProfile,
   job,
   profileBranding,
@@ -50,18 +51,40 @@ export const myServiceGrant = spacetimedb.view(
   ctx => ctx.db.serviceIdentity.identity.find(ctx.sender) ?? undefined
 );
 
-/** Jobs a worker may consider claiming. The claim reducer re-checks eligibility and time. */
+/**
+ * Jobs a worker may consider claiming, limited to the kinds it registered,
+ * so unsupported kinds can neither be claimed nor crowd out supported work.
+ * The claim reducer re-checks eligibility and time.
+ */
 export const workerJobs = spacetimedb.view(
   { name: 'worker_jobs', public: true },
   t.array(job.rowType),
   ctx => {
     if (!isService(ctx, ctx.sender)) return [];
+    const registration = ctx.db.workerRegistration.identity.find(ctx.sender);
+    if (!registration) return [];
     const out = [];
     for (const status of [JOB_STATUS.queued, JOB_STATUS.retryWait, JOB_STATUS.running]) {
-      for (const row of ctx.db.job.status.filter(status)) {
-        out.push(row);
-        if (out.length >= WORKER_JOBS_LIMIT) return out;
+      for (const kind of registration.kinds) {
+        for (const row of ctx.db.job.by_status_kind.filter([status, kind])) {
+          out.push(row);
+          if (out.length >= WORKER_JOBS_LIMIT) return out;
+        }
       }
+    }
+    return out;
+  }
+);
+
+/** Stored completed-session bars for the active universe (service only). */
+export const workerDailyBars = spacetimedb.view(
+  { name: 'worker_daily_bars', public: true },
+  t.array(dailyBar.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return [];
+    const out = [];
+    for (const s of ctx.db.stock.active.filter(true)) {
+      for (const bar of ctx.db.dailyBar.by_ticker_date.filter(s.ticker)) out.push(bar);
     }
     return out;
   }

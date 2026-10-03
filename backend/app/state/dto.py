@@ -55,3 +55,70 @@ class ServiceGrantV1(_Dto):
     identity: IdentityHex
     label: str
     added_at: datetime
+
+
+class StockV1(_Dto):
+    ticker: str
+    name: str
+    exchange: str
+    industry: str
+    sector: str
+    currency: str
+    kind: Literal["equity", "benchmark"]
+    benchmark: str
+    display_order: int
+    active: bool
+    updated_at: datetime
+
+
+class MarketQuoteV1(_Dto):
+    ticker: str
+    generation: int
+    price_micros: int
+    previous_close_micros: int
+    open_micros: int
+    high_micros: int
+    low_micros: int
+    provider_time: datetime
+    ingested_at: datetime
+    published_at: datetime
+    source: str
+
+
+class DailyBarV1(_Dto):
+    id: int
+    ticker: str
+    session_date: str
+    open_micros: int | None
+    high_micros: int | None
+    low_micros: int | None
+    close_micros: int
+    volume: int | None
+    adjusted: bool
+    source: str
+    ingested_at: datetime
+
+
+class MarketGenerationV1(_Dto):
+    scope: str
+    generation: int
+    job_id: int
+    as_of: datetime
+    published_at: datetime
+    market_open: bool
+    market_session: str
+    market_status_at: datetime
+    last_completed_session: str
+    quote_count: int
+    signal_count: int
+    algorithm_version: str
+    provider: str
+
+
+class ProviderCapabilityV1(_Dto):
+    key: str
+    provider: str
+    capability: str
+    available: bool
+    detail: str
+    checked_at: datetime

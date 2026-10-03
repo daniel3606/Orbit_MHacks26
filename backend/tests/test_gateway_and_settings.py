@@ -96,3 +96,13 @@ def test_health_and_unready_without_server():
         assert missing.status_code == 404
         assert missing.json()["error"]["code"] == "not_found"
         assert missing.headers["x-request-id"]
+
+
+def test_blank_env_values_are_treated_as_unset(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text("SPACETIME_SERVICE_TOKEN=\nFINNHUB_API_KEY=\n")
+    token_file = tmp_path / "service_token"
+    token_file.write_text("from-file")
+    s = Settings(_env_file=env, spacetime_service_token_file=token_file)
+    assert s.spacetime_service_token is None and s.finnhub_api_key is None
+    assert s.resolved_service_token().get_secret_value() == "from-file"

@@ -14,7 +14,16 @@ from typing import Any, TypeVar
 import httpx
 from pydantic import BaseModel, SecretStr, ValidationError
 
-from app.state.dto import InvestmentProfileV1, JobV1, ServiceGrantV1
+from app.state.dto import (
+    DailyBarV1,
+    InvestmentProfileV1,
+    JobV1,
+    MarketGenerationV1,
+    MarketQuoteV1,
+    ProviderCapabilityV1,
+    ServiceGrantV1,
+    StockV1,
+)
 from app.state.sats_json import SatsDecodeError, decode_result_set
 
 log = logging.getLogger(__name__)
@@ -160,3 +169,36 @@ class SpacetimeGateway:
 
     async def fail_job(self, job_id: int, attempt: int, error_code: str, retryable: bool) -> None:
         await self.call_reducer("fail_job", [job_id, attempt, error_code, retryable])
+
+    async def register_worker(self, kinds: Sequence[str]) -> None:
+        await self.call_reducer("register_worker", [list(kinds)])
+
+    # ---- market (service-only reducers; public projections) ----
+
+    async def stocks(self) -> list[StockV1]:
+        return self._parse(StockV1, await self._view("stock"))
+
+    async def market_quotes(self) -> list[MarketQuoteV1]:
+        return self._parse(MarketQuoteV1, await self._view("market_quote"))
+
+    async def market_generation(self) -> MarketGenerationV1 | None:
+        rows = self._parse(MarketGenerationV1, await self._view("market_generation"))
+        return rows[0] if rows else None
+
+    async def provider_capabilities(self) -> list[ProviderCapabilityV1]:
+        return self._parse(ProviderCapabilityV1, await self._view("provider_capability"))
+
+    async def worker_daily_bars(self) -> list[DailyBarV1]:
+        return self._parse(DailyBarV1, await self._view("worker_daily_bars"))
+
+    async def upsert_stocks(self, stocks: Sequence[dict[str, Any]]) -> None:
+        await self.call_reducer("upsert_stocks", [list(stocks)])
+
+    async def publish_provider_capabilities(self, capabilities: Sequence[dict[str, Any]]) -> None:
+        await self.call_reducer("publish_provider_capabilities", [list(capabilities)])
+
+    async def request_market_ingest(self) -> None:
+        await self.call_reducer("request_market_ingest", [])
+
+    async def publish_market_snapshot(self, args: Sequence[Any]) -> None:
+        await self.call_reducer("publish_market_snapshot", list(args))

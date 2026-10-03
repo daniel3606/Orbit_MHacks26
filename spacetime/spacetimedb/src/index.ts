@@ -1,11 +1,27 @@
 import { SenderError, t } from 'spacetimedb/server';
 import spacetimedb from './schema';
 import { requireAdmin } from './auth';
+import { scheduleMarketIngest } from './market';
 
 export default spacetimedb;
 
 export { completeOnboarding, updatePreferences } from './profile';
-export { requestBackendCheck, claimJob, completeJob, failJob } from './jobs';
+export {
+  requestBackendCheck,
+  claimJob,
+  completeJob,
+  failJob,
+  registerWorker,
+  requestMarketIngest,
+} from './jobs';
+export {
+  marketTick,
+  configureMarketSchedule,
+  setServiceFlag,
+  upsertStocks,
+  publishProviderCapabilities,
+  publishMarketSnapshot,
+} from './market';
 export {
   myAccount,
   myProfile,
@@ -13,12 +29,16 @@ export {
   myJobs,
   myServiceGrant,
   workerJobs,
+  workerDailyBars,
   workerJobProfiles,
 } from './views';
 
-/** The publishing identity becomes the first module admin. */
+const DEFAULT_MARKET_INTERVAL_SECONDS = 300;
+
+/** The publishing identity becomes the first module admin; market ingestion is scheduled. */
 export const init = spacetimedb.init(ctx => {
   ctx.db.moduleAdmin.insert({ identity: ctx.sender, addedAt: ctx.timestamp });
+  scheduleMarketIngest(ctx, DEFAULT_MARKET_INTERVAL_SECONDS);
 });
 
 /** Records the verified issuer/subject for each connecting identity. */

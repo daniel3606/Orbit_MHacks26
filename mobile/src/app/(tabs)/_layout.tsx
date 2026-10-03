@@ -20,6 +20,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textMuted,
       }}>
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: icon('sparkles') }} />
+      <Tabs.Screen name="market" options={{ title: 'Market', tabBarIcon: icon('chart.line.uptrend.xyaxis') }} />
       <Tabs.Screen name="discover" options={{ title: 'Discover', tabBarIcon: icon('scope') }} />
       <Tabs.Screen name="portfolio" options={{ title: 'Practice', tabBarIcon: icon('chart.pie') }} />
     </Tabs>

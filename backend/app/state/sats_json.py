@@ -133,3 +133,15 @@ def identity_arg(identity_hex: str) -> list[str]:
     if len(hex_value) != 64 or any(c not in "0123456789abcdef" for c in hex_value):
         raise ValueError("identity must be 64 hex characters")
     return [f"0x{hex_value}"]
+
+
+def timestamp_arg(dt: datetime) -> dict[str, int]:
+    if dt.tzinfo is None:
+        raise ValueError("timestamp must be timezone-aware")
+    delta = dt - datetime(1970, 1, 1, tzinfo=UTC)
+    micros = (delta.days * 86_400 + delta.seconds) * 1_000_000 + delta.microseconds
+    return {"__timestamp_micros_since_unix_epoch__": micros}
+
+
+def micros_of(dt: datetime) -> int:
+    return timestamp_arg(dt)["__timestamp_micros_since_unix_epoch__"]

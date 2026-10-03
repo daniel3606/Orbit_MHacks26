@@ -1,100 +1,136 @@
 # Implementation status
 
-_Last updated: 2026-10-03 · PRD phases 0–1 (integration proof, state and UI foundation)_
+_Last updated: 2026-10-03 · PRD phases 0–2 (integration proof, state and UI foundation, quant foundation)_
 
-## Completed
+## Phase 2 — market data and deterministic signals
 
-**SpacetimeDB module** (`spacetime/spacetimedb/src`, TypeScript, SpacetimeDB 2.10.2)
-- Private tables: `module_admin`, `service_identity`, `user_account`, `investment_profile`, `profile_branding`, `job`.
-- Owner-authorized reducers `complete_onboarding` and `update_preferences`. Ownership always comes from `ctx.sender`, `expectedVersion` gives optimistic concurrency, and enum and sector values are validated against server-side lists.
-- Zodiac is stored only in `profile_branding`. Ranking inputs (`worker_job_profiles`) cannot include it.
-- Durable jobs (PRD §9):
-  - `request_backend_check` is idempotent by request key and rate-limited.
-  - Profile changes enqueue a coalesced `refresh_recommendations` job.
-  - Worker reducers: `claim_job` (lease, with the attempt number as fencing token), `complete_job` (checks lease, expiry and input version; a duplicate is a no-op) and `fail_job` (backoff with jitter, attempt limit).
-- Caller-scoped views: `my_account`, `my_profile`, `my_branding`, `my_jobs`.
-- Service-gated views: `worker_jobs`, `worker_job_profiles` (lease-holder only) and `my_service_grant`.
-- Admin-only `grant/revoke_service_identity`. The publisher becomes admin in `init`.
+### Provider capabilities (verified on 2026-10-03)
 
-**Backend** (`backend/`, Python 3.14, FastAPI, uv)
-- Typed settings validated by pydantic-settings. Secrets use `SecretStr`, and Alpaca accepts only the paper endpoint.
-- `GET /health` and `GET /ready`. Readiness checks SpacetimeDB reachability and that the worker token is on the allowlist.
-- v1 error envelope with request IDs.
-- `SpacetimeGateway` over the documented HTTP API, with a schema-driven SATS-JSON decoder, versioned DTOs (`extra="forbid"`) and stable error mapping.
-- Worker: poll → claim → confirm lease → handler (outside the transaction) → complete/fail. Bounded concurrency and idle backoff.
-- The worker identity is created and granted by `scripts/bootstrap_service_identity.py`, with the token stored in a 0600 file.
-- Provider protocols only: market data, news classifier, explanations, paper trading. No adapters and no fixtures.
+These come from Finnhub's official OpenAPI spec (`finnhub.io/static/swagger.json`) and live probes with the configured key. Capabilities are re-probed automatically and published to `provider_capability`.
 
-**Mobile** (`mobile/`, Expo SDK 57, RN 0.86, Expo Router, Zustand)
-- One managed connection (`src/realtime/connection.ts`):
-  - Compression disabled.
-  - Guest token kept in the Keychain (`THIS_DEVICE_ONLY`) and restored on launch.
-  - The app is ready only after the subscription is applied.
-  - AppState pause/resume, exponential reconnect, and generation-guarded callbacks so listeners never stack.
-  - Survives Fast Refresh.
-  - Never queues mutations offline.
-- Shell: startup gate, protected routes, and tabs (Home, Discover, Practice). Discover and Practice show honest empty states and no placeholder data.
-- Onboarding: 7 questions plus review, with the local draft in Zustand. Editing preferences detects conflicts. Banners cover loading, offline/stale, error and retry.
-- In-app diagnostics: runtime API checks, connection counters, a backend round trip, and an explicit reset of the guest session.
-- Provisional celestial design tokens and components (`src/ui`). No Figma reference was available.
+| Capability | Configured key | Notes |
+|---|---|---|
+| `/quote` | **Available** | Returns `c,d,dp,h,l,o,pc,t`. `t` (UNIX seconds) is returned live but missing from the spec schema. No volume. Unknown symbols return all zeros, which the adapter rejects. |
+| `/stock/candle` (daily OHLCV, also used for benchmark history) | **HTTP 403** "You don't have access to this resource." | The spec says daily candles are split-adjusted (not dividend-adjusted) and intraday candles are unadjusted. |
+| `/stock/split` | **HTTP 403** | No corporate-action feed is available. |
+| `/stock/profile2` | Available | Returns `{}` for ETFs. |
+| `/stock/market-status`, `/stock/market-holiday` | Available | Holiday data covers 2023–2027, including early closes. |
+| Rate limits | 60 calls/min (`x-ratelimit-limit` header), plus a documented 30 calls/s cap | HTTP 429 when exceeded. The adapter targets 50/min with bursts up to 20. |
 
-**Tooling**: Makefile, README, `.env.example` for each component, committed lockfiles, a contract check between app and module option lists, and ESLint (eslint-config-expo).
+**Consequence.** The real data obtained is the latest quote for all 21 tickers (11 equities and 10 benchmark ETFs) with the provider's own timestamps, plus completed-session closes derived from those quotes: the previous close, and the current session's close once that session has ended. These closes are unadjusted and have no volume.
 
-## Verified
+No genuine 20-day history exists, so every relative momentum, volatility and abnormal-volume feature is published as **unavailable**. No Trend Score is published (status `insufficient_data`). Only the 1-day move and the 1-day move relative to the benchmark are shown. Abnormal volume needs daily volume, which quotes never provide. So even after months of quote-derived closes, coverage could reach at most 0.35, below the 0.55 publication gate.
+
+**Smallest setup that enables real scoring:** a Finnhub plan that includes **Stock Candles (daily)** for the 21 tickers. No code change is needed. On the next run the probe sees access, the adapter pulls 180 days of split-adjusted OHLCV, and the candle bars replace the quote-derived bars (candles rank higher as a source). Scores then publish once there are 81 aligned sessions per ticker and its benchmark. A split-history entitlement would be useful but is not required.
+
+### Built
+
+**Module** (additive migration; `orbit-dev` kept all existing data):
+- Public, read-only projections:
+  - `stock` (universe and benchmarks)
+  - `market_quote` (latest per ticker; fixed-point micro-units)
+  - `trend_signal` (latest per ticker: features, raw and normalized values, sample/baseline counts, reasons, coverage, notes)
+  - `market_generation` (current coherent snapshot, with market status)
+  - `provider_capability`
+- Private, bounded tables: `daily_bar` (≤400 per ticker), `trend_signal_history` (≤120 per ticker), `market_schedule`, `worker_registration`, `service_config`.
+- `publish_market_snapshot` (service-only):
+  - Requires the caller's current lease on the `ingest_market` job and a strictly newer generation.
+  - Requires each ticker's provider time to be non-decreasing.
+  - Rejects unknown or duplicate tickers, non-positive prices, future timestamps or sessions, NaN/∞ values, scores outside 0–100, and coverage outside 0–1. A score must be present exactly when status is `published`.
+  - Rejects fixture rows unless an admin enables `allow_fixture_data`.
+  - Validates everything before writing anything, then commits quotes, bars, signals, generation and job completion in one transaction. A retried identical publish is a no-op.
+- A scheduled reducer enqueues one shared `ingest_market` job every 300 s, owned by the database identity. Active jobs coalesce and system-job retention is bounded.
+- `register_worker`: `worker_jobs` now returns only the kinds a worker has registered. Unsupported `refresh_recommendations` jobs are never offered, so they can neither be claimed repeatedly nor block supported work.
+- Admin reducers: `configure_market_schedule`, `set_service_flag`. Service reducer: `request_market_ingest` (also allowed for the admin).
+
+**Backend:**
+- `FinnhubProvider`:
+  - The key is sent only in the `X-Finnhub-Token` header, never in URLs or logs.
+  - Token-bucket rate limiter (pauses on 429).
+  - In-flight request coalescing plus TTL cache, so concurrent identical requests make one call.
+  - Bounded retries with jitter. 401/403 are never retried.
+  - Capability probing; `Decimal` parsing.
+- `UsEquityCalendar` (weekends, provider holidays, early closes). Quote validation and derivation of completed-session closes from quotes.
+- Signals (`app/signals`, `trend-v1.0.0`):
+  - PRD formulas for relative momentum over 1, 5 and 20 sessions (sector-ETF benchmark, SPY fallback), 20-session realized volatility, volatility-adjusted momentum, and completed-day abnormal volume.
+  - Prior-only 60-observation z-scores, clipped to ±3.
+  - Weights renormalized over the available price/volume features, with `coverage` = sum of the original available weights.
+  - Publication gate: momentum and volume available, and coverage ≥ 0.55.
+  - News features are explicitly `news_phase_pending`.
+- Guards:
+  - Missing bars (calendar-aligned; no interpolation), invalid bars, incomplete or future sessions, stale history.
+  - Mixed adjustment conventions; one-day jumps over 40% on unadjusted series (possible split).
+  - Revised closes from the same source (adjustment conflict); zero variance (epsilon).
+- `ingest_market` handler: one shared fetch per run, never per user. Deduplicated, versioned bars. Atomic publication through the lease.
+- The worker registers its kinds at startup and supports per-kind leases.
+- `FixtureProvider` and `scripts/publish_fixture_snapshot.py` are TEST-ONLY. All their data is labeled `fixture`, and the script refuses to run against `orbit-dev`.
+
+**Mobile:**
+- New **Market** tab. It subscribes to the market projections only while focused and re-subscribes after reconnect. It never subscribes to the history tables and never polls FastAPI.
+- Screen contents:
+  - Market open/closed state, last completed session, status check time and publish time.
+  - A data-limits card built from the probed capabilities.
+  - Per stock: price with the provider's data timestamp and source, change vs previous close, and the 1-day move vs its benchmark.
+  - Trend Score only when published, labeled "heuristic" and "not a probability". Otherwise history/coverage status, plus a per-feature breakdown with plain-language reasons.
+  - Loading, empty, stale (>15 min), offline and error states.
+- No fabricated fit scores, match percentages or "why matched" text.
+
+### Verified
 
 | Behavior | How |
 |---|---|
-| Subscription applied → reducer → row update | `spacetime/tests` (17 tests, Node SDK over WebSocket against the local server) |
-| Two identities isolated; consumers see empty worker views | same, plus HTTP checks in `backend/tests/test_worker_integration.py` |
-| Consumer calls to claim/complete/fail/grant rejected | same (`not_authorized_service`, `not_authorized_admin`) |
-| Validation, optimistic versioning, branding-only edits keep the version | spacetime tests |
-| Claim ownership, duplicate completion no-op, stale input rejected, backoff, lease expiry and reclaim with fencing, revocation | spacetime tests |
-| Python gateway authenticated read and reducer path; worker enqueue → claim → complete | `backend/tests` (21 tests, 2 against the real server) |
-| HTTP API contracts (arg encoding, sum/identity/timestamp row encoding, 530 = SenderError) | recorded fixtures in `backend/tests/fixtures` |
-| Expo runtime: Hermes, `URL` (relative, protocol setter, searchParams), `TextDecoder`, `BigInt` | in-app diagnostics on the **iOS 26.3 simulator** (iPhone 17 Pro). No URL polyfill was needed: Expo 57's runtime provides WHATWG `URL` |
-| Binary protocol encode/decode on Hermes | simulator: subscription applied and reducers succeeded |
-| Onboarding saved → Home shows subscribed values; edit → version 2 shown | simulator, cross-checked with `spacetime sql` |
-| Cold relaunch restores the same identity and profile from the Keychain | simulator (terminate + relaunch) |
-| Server outage → stale banner with editing disabled → automatic reconnect | simulator (stopped and restarted `spacetime start`) |
-| Background → socket torn down; foreground → reconnect; one live connection | simulator (Home button; diagnostics showed 1 live after 6 opens) |
-| Device → backend round trip (tap → worker → subscribed result) | simulator diagnostics: job #3 succeeded in about 10.6 s with the old 15 s idle poll; the cap is now 5 s |
-| Type and lint checks | `make typecheck`: tsc ×3, expo lint, contract check, mypy --strict |
+| Live quotes for 21 tickers with provider timestamps; 403 on candles and splits | `make test-live` (3 live tests) and a live worker run on `orbit-dev` |
+| Live Finnhub → Python → `publish_market_snapshot` → subscribed app | iOS 26.3 **simulator**: Market tab shows Friday Oct 2 4:00 PM EDT closes, "market closed", and the data-limits card. A second ingestion updated the open screen without user action. |
+| Market subscription survives a server outage | simulator: offline banner kept the last data; after restart it re-subscribed and showed the new generation |
+| Hand-calculated features, prior-only normalization, clipping, zero variance, coverage and renormalization, publication gate | `backend/tests/test_signals.py` (18) |
+| Missing bars, stale history, incomplete/future sessions, invalid bars, mixed adjustment, possible corporate action, current-plan shape (2 unadjusted closes, no volume) | same |
+| Request coalescing, bounded retry, 429 pause, 403 not retried, capability probe, zero-quote rejection, candle parsing, calendar/early close | `backend/tests/test_finnhub_provider.py` (13), mocked HTTP |
+| Consumers cannot publish, register workers, request ingestion or configure; private bars are not readable | `spacetime/tests/market.test.ts` |
+| Lease enforcement, stale/equal generations, out-of-order quotes (whole snapshot rejected, nothing written), invalid values, fixture rejection, idempotent retry | same |
+| Real Python worker → SpacetimeDB → subscribed Node client, full scored path | same, using the labeled **fixture** provider on `orbit-test`: 10 or more published signals at coverage 0.55 |
+| Unsupported job kinds are not offered to workers | `backend/tests/test_worker_integration.py` |
+| Regression suite | `make check`: 25 realtime and 53 backend tests, tsc ×3, lint, contract check, mypy --strict |
 
-## Prepared but not verified
+### Not verified or not available
 
-- **Physical iPhone.** Nothing has run on a device. The address auto-derives from the Metro host; set `EXPO_PUBLIC_SPACETIME_URI` if needed. Checks still required on a device:
-  - runtime diagnostics all green
-  - onboarding saved
-  - relaunch restores the session
-  - airplane mode on/off reconnects
-  - background ≥ 30 s then foreground
-  - backend check succeeds over LAN
-  - a release build (`expo run:ios --configuration Release`) behaves the same
-- **OIDC / SpacetimeAuth.** Not configured. The app runs on device-bound guest identities, labeled as such in the UI.
-- **FastAPI user authentication.** No user-authenticated routes exist. `GET /v1/identity/public-key` exists on the server and could verify guest tokens, but that mapping has not been built or tested.
-- **Android.** Not run.
+- **Scored live signals.** Blocked by the Finnhub plan (no candles, no volume); see "Smallest setup" above. Scored output has only been produced from labeled fixtures.
+- **Candle path with real data.** Parsing is tested against the documented shape; it has never received a real 200 response.
+- **Split detection without a split feed.** It is heuristic (a jump of more than 40% on unadjusted closes, or a revised close). A real split would pause features for that ticker until history is reconciled.
+- **Physical iPhone.** Not run. The market screen was checked only on the simulator.
+
+## Earlier phases (unchanged and still passing)
+
+- **SpacetimeDB:**
+  - Private owner-scoped profile, branding, account and job tables; owner-authorized onboarding and editing with optimistic versioning.
+  - Caller-scoped `my_*` views; service-allowlisted worker views and reducers.
+  - Durable jobs with leases, fencing, backoff and idempotency.
+- **Backend:**
+  - Typed settings (empty `KEY=` lines in `.env` now mean unset); `/health` and `/ready`.
+  - `SpacetimeGateway` over the HTTP API, versioned DTOs, durable worker.
+- **Mobile:**
+  - Guest session in the Keychain; one managed connection with AppState pause/resume and reconnect.
+  - Onboarding, Home, editing, diagnostics.
+  - Simulator-verified relaunch persistence, offline/reconnect, and the backend round trip.
 
 ## Outstanding dependencies (supplied by you)
 
-- **Figma**: the file or frame exports, plus confirmation of whether pre-event assets may be reused. The UI is provisional until then.
-- **OIDC**: the SpacetimeAuth (or other provider) project, client ID and redirect URI for the Expo scheme `orbit://`.
-- **Apple developer team**: needed to sign a build for a physical iPhone.
-- **Provider keys** in `backend/.env`, needed from the next phases on:
-  - `FINNHUB_API_KEY` (and confirmation of which plan tier covers history, news and benchmarks)
-  - `JEV_API_KEY` and `JEV_BASE_URL`, plus API documentation (the contract is unverified)
-  - `OPENAI_API_KEY`
-  - `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY` for the designated paper demo account
+- **Finnhub plan with daily Stock Candles.** Needed for real Trend Scores. The key stays in `backend/.env`.
+- **OIDC** (SpacetimeAuth client and the `orbit://` redirect), an **Apple developer team** for a physical iPhone, and the **Figma** file or exports.
+- **Jev** API documentation (the contract is unverified), plus the keys already present for OpenAI and Alpaca paper. These are used in later phases.
 
-## Decisions and deviations
+## Decisions
 
-- The module lives at `spacetime/spacetimedb/src`, the official `spacetime init` layout. Routes live at `mobile/src/app`, the Expo SDK 57 default. The PRD names `spacetime/src` and `mobile/app`.
-- The repo uses Node 24.15 (`.nvmrc`), because Expo SDK 57 requires Node ≥ 22.13. The machine default (Node 20) is unchanged.
-- Preference enums are validated strings, which keeps the TypeScript and Python contracts simple. The values are listed in `preferences.ts` and checked against the app.
-- `refresh_recommendations` jobs stay **queued** on purpose. There is no handler until ranking (Phase 4) exists, so no work is faked.
-- I added the `my_service_grant` view so worker readiness can prove the token is on the allowlist.
+- Prices are stored as integer micro-units (i64); features are f64. UI prices are display-only.
+- Benchmarks are SPDR sector ETFs from a configurable universe file, with SPY as the documented fallback.
+- Without candles, the history is built from quote-derived closes. These are labeled `finnhub_quote` and unadjusted, and are never mixed with adjusted candles in a single calculation.
+- Market tables are public projections because market data is shared. Bars and signal history stay private.
+- `ingest_market` jobs are owned by the database identity, so they never appear in any user's `my_jobs`.
 
-## Next step (PRD Phase 0 remainder → Phase 2)
+## Next step toward personalized discovery (Phase 3/4)
 
-1. Run the physical-iPhone checks above and validate OIDC with SpacetimeAuth on device. Then bind FastAPI requests to verified tokens.
-2. Check what the Alpaca paper account provides (balance, fractional orders) during Phase 0, as the PRD requires.
-3. Phase 2: a Finnhub `MarketDataProvider` adapter after checking plan capabilities. Then `stocks`, `market_snapshots` and `trend_signals` tables with service-only publish reducers, and deterministic momentum, volume and volatility features with coverage tracking, published live without AI.
+1. Enable daily candles (plan change), then verify live scored signals and inspect a few features by hand against the provider data.
+2. Phase 3: add the Jev adapter after verifying its API contract, plus Finnhub company news (check plan access first). That makes news features available or explicitly unavailable.
+3. Phase 4:
+   - A Python fit rubric from `worker_job_profiles` and the published signals.
+   - A `refresh_recommendations` handler that writes a versioned recommendation generation with an atomic pointer switch, rejecting results computed from stale profiles.
+   - Caller-scoped `my_recommendations` and a Discover screen with real "why matched" reasons from structured evidence.

@@ -1,7 +1,9 @@
-"""Market-data provider interface (PRD §10, §20). Finnhub adapter: Phase 2.
+"""Market-data provider interface (PRD §10, §20).
 
-Implementations must report capabilities honestly; unavailable fields are
-`None`/absent, never synthesized.
+Implementations report capabilities from what the configured account can
+actually access; unavailable data is absent, never synthesized. Prices are
+`Decimal`; times are timezone-aware UTC. News methods arrive with the news
+intelligence phase.
 """
 
 from dataclasses import dataclass
@@ -11,49 +13,71 @@ from typing import Protocol
 
 
 @dataclass(frozen=True)
-class ProviderCapabilities:
-    quotes: bool
-    daily_history: bool
-    adjusted_history: bool
-    company_news: bool
-    market_news: bool
-    benchmarks: tuple[str, ...]
+class CapabilityResult:
+    key: str  # e.g. "finnhub.daily_candles"
+    capability: str
+    available: bool
+    detail: str
 
 
 @dataclass(frozen=True)
 class Quote:
     ticker: str
     price: Decimal
-    provider_time: datetime
+    previous_close: Decimal
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    provider_time: datetime  # provider's last-trade/data timestamp
     ingested_at: datetime
     source: str
 
 
 @dataclass(frozen=True)
 class DailyBar:
+    """One completed session. OHLC/volume are None when the source lacks them."""
+
     ticker: str
-    session_date: date
+    session: date
     close: Decimal
-    volume: int
-    adjusted: bool
+    open: Decimal | None
+    high: Decimal | None
+    low: Decimal | None
+    volume: int | None
+    adjusted: bool  # split-adjusted series
+    source: str  # "finnhub_candle" | "finnhub_quote" | "fixture"
 
 
 @dataclass(frozen=True)
-class NewsItem:
-    article_id: str
-    ticker: str | None
-    headline: str
-    summary: str | None
-    source: str
-    url: str
-    published_at: datetime
+class MarketStatus:
+    exchange: str
+    is_open: bool
+    session: str  # "pre-market" | "regular" | "post-market" | "closed"
+    holiday: str | None
+    as_of: datetime
+
+
+@dataclass(frozen=True)
+class Holiday:
+    day: date
+    trading_hours: str  # "" = closed all day; "09:30-13:00" = early close
+
+
+@dataclass(frozen=True)
+class CompanyProfile:
+    ticker: str
+    name: str
+    exchange: str
+    industry: str
+    currency: str
 
 
 class MarketDataProvider(Protocol):
     name: str
 
-    async def capabilities(self) -> ProviderCapabilities: ...
+    async def capabilities(self) -> list[CapabilityResult]: ...
     async def get_quote(self, ticker: str) -> Quote: ...
-    async def get_price_history(self, ticker: str, start: date, end: date) -> list[DailyBar]: ...
-    async def get_company_news(self, ticker: str, start: date, end: date) -> list[NewsItem]: ...
-    async def get_market_news(self) -> list[NewsItem]: ...
+    async def get_daily_bars(self, ticker: str, start: date, end: date) -> list[DailyBar]: ...
+    async def get_profile(self, ticker: str) -> CompanyProfile | None: ...
+    async def get_market_status(self) -> MarketStatus: ...
+    async def get_holidays(self) -> list[Holiday]: ...

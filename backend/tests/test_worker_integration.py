@@ -72,6 +72,12 @@ async def test_enqueue_claim_complete_round_trip(actors):
     await user.call_reducer("request_backend_check", [key])
     await user.call_reducer("request_backend_check", [key])  # idempotent duplicate
 
+    # Before registering, a service worker is offered nothing.
+    assert await svc.worker_jobs() == []
+    await svc.register_worker(["backend_check"])
+    offered = await svc.worker_jobs()
+    assert offered and all(j.kind == "backend_check" for j in offered)  # never refresh_recommendations
+
     mine = [j for j in await user.my_jobs() if j.kind == "backend_check"]
     assert len(mine) == 1 and mine[0].status == "queued" and mine[0].input_version == 2
 

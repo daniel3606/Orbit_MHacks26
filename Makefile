@@ -8,7 +8,7 @@ export LC_ALL := en_US.UTF-8
 DB ?= orbit-dev
 SIM ?= iPhone 17 Pro
 
-.PHONY: help check-node install stdb-start publish generate worker-identity api worker \
+.PHONY: help check-node install stdb-start publish generate worker-identity api worker test-live ingest-now \
         mobile-ios mobile-start test test-spacetime test-backend typecheck check
 
 help:
@@ -53,6 +53,12 @@ test-spacetime: check-node ## Republish orbit-test (wiped) and run realtime inte
 
 test-backend: ## Backend unit + integration tests (integration needs orbit-test)
 	cd backend && uv run pytest -q
+
+test-live: ## Opt-in live Finnhub checks (uses the backend key; costs API calls)
+	cd backend && ORBIT_LIVE_PROVIDER_TESTS=1 uv run pytest -q -s tests/test_finnhub_live.py
+
+ingest-now: ## Ask the worker to run market ingestion now (admin CLI identity)
+	spacetime call --no-config $(DB) --server local request_market_ingest
 
 test: test-spacetime test-backend ## All automated tests
 

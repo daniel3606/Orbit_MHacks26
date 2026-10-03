@@ -7,7 +7,7 @@ per user) until a real handler exists.
 
 from app.state.dto import JobV1
 from app.state.gateway import SpacetimeGateway
-from app.workers.runner import JobFailure
+from app.workers.runner import JobFailure, JobHandler
 
 
 class BackendCheckHandler:
@@ -30,6 +30,6 @@ class BackendCheckHandler:
         return f"worker={self._worker_id};observed_profile_version={observed}"
 
 
-def default_handlers(worker_id: str) -> dict[str, BackendCheckHandler]:
+def default_handlers(worker_id: str) -> dict[str, JobHandler]:
     handler = BackendCheckHandler(worker_id)
     return {handler.kind: handler}
