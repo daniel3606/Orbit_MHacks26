@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { isAnswered, QuestionBlock, QUESTIONS } from '@/features/onboarding/questions';
 import { BrandHeader, PillButton, ProgressSegments } from '@/features/onboarding/ui';
@@ -17,6 +18,7 @@ import { space } from '@/ui/theme';
 export default function QuestionsScreen() {
   const router = useRouter();
   const rt = useRealtime();
+  const reduceMotion = useReducedMotion();
   const { draft, step, setStep, reset } = useDraft();
   const begin = useReveal(s => s.begin);
   const end = useReveal(s => s.end);
@@ -61,16 +63,16 @@ export default function QuestionsScreen() {
       // A fresh scroll position for each question.
       key={index}
       header={
-        <>
+        <View style={styles.header}>
           <BrandHeader onBack={back} />
           <ProgressSegments count={QUESTIONS.length} current={index} />
-        </>
+        </View>
       }
       footerBorder={false}
       footer={
         <View style={styles.next}>
           <PillButton
-            label={last ? 'Continue' : 'Next'}
+            label={last ? 'Finish' : 'Continue'}
             busy={saving}
             disabled={!canContinue || (last && !live)}
             onPress={last ? save : () => setStep(index + 1)}
@@ -78,7 +80,9 @@ export default function QuestionsScreen() {
         </View>
       }>
       <ConnectionBanner />
-      <QuestionBlock question={question} />
+      <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(280)}>
+        <QuestionBlock question={question} />
+      </Animated.View>
       {error ? <Banner tone="danger" title="Not saved" body={error} /> : null}
       {last && !live ? (
         <T variant="caption" muted>
@@ -90,5 +94,6 @@ export default function QuestionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  next: { paddingHorizontal: space.xl, paddingBottom: space.sm },
+  header: { gap: space.md },
+  next: { paddingBottom: space.xs },
 });

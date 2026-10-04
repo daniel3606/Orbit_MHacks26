@@ -88,11 +88,17 @@ export function QuestionBlock({ question, compact }: { question: Question; compa
     );
   }
   return (
-    <View style={{ gap: space.md }} accessibilityRole={question.kind === 'options' && !question.multi ? 'radiogroup' : undefined}>
-      <T variant="title" accessibilityRole="header">
-        {question.title}
-      </T>
-      {question.help ? <T muted>{question.help}</T> : null}
+    <View style={styles.block} accessibilityRole={question.kind === 'options' && !question.multi ? 'radiogroup' : undefined}>
+      <View style={styles.blockHead}>
+        <Text style={styles.blockTitle} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+          {question.title}
+        </Text>
+        {question.help ? (
+          <Text style={styles.blockHelp} maxFontSizeMultiplier={1.4}>
+            {question.help}
+          </Text>
+        ) : null}
+      </View>
       {question.kind === 'birthday' ? <BirthdayFields /> : <OptionList question={question} />}
     </View>
   );
@@ -216,6 +222,16 @@ export function isAnswered(question: Question, draft: Draft): boolean {
 }
 
 const styles = StyleSheet.create({
+  block: { gap: space.xl },
+  blockHead: { gap: space.sm },
+  blockTitle: {
+    fontFamily: font.semibold,
+    fontSize: 26,
+    lineHeight: 32,
+    color: colors.text,
+    letterSpacing: -0.4,
+  },
+  blockHelp: { fontFamily: font.regular, fontSize: 15, lineHeight: 21, color: colors.textMuted },
   section: { gap: space.md },
   sectionHead: { gap: 2 },
   sectionTitle: { fontFamily: font.semibold, fontSize: 18, lineHeight: 24, color: colors.text },

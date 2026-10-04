@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { colors, font, HIT, space } from './theme';
+import { colors, font, HIT, radius, space } from './theme';
 
 export type DropdownOption<V> = { value: V; label: string };
 
@@ -131,20 +131,20 @@ const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   label: { fontFamily: font.medium, fontSize: 14, lineHeight: 19, color: colors.text },
   field: {
-    height: 50,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.lg,
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.fieldBorder,
     backgroundColor: colors.field,
   },
-  value: { flex: 1, fontFamily: font.medium, fontSize: 16, color: colors.text },
+  value: { flex: 1, fontFamily: font.medium, fontSize: 16, lineHeight: 22, color: colors.text },
   menu: {
     position: 'absolute',
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     backgroundColor: colors.surfaceRaised,
