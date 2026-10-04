@@ -154,13 +154,15 @@ export default function TradeTicket() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const params = useLocalSearchParams<{ ticker: string; side: string }>();
+  const params = useLocalSearchParams<{ ticker: string; side: string; amount?: string }>();
   const ticker = typeof params.ticker === 'string' ? params.ticker : '';
   const side: 'buy' | 'sell' = params.side === 'sell' ? 'sell' : 'buy';
+  const startingAmount =
+    typeof params.amount === 'string' && /^\d{1,7}(\.\d{1,2})?$/.test(params.amount) ? params.amount : '';
   const rt = useRealtime();
   useFocusEffect(useCallback(() => realtime.acquireMarket(), []));
 
-  const [entry, setEntry] = useState('');
+  const [entry, setEntry] = useState(startingAmount);
   const [sellAll, setSellAll] = useState(false);
   const [phase, setPhase] = useState<Phase>('edit');
   const [placed, setPlaced] = useState<Placed | null>(null);

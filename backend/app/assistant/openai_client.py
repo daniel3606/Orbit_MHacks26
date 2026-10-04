@@ -26,6 +26,7 @@ async def complete(
     *,
     timeout: float,
     client: httpx.AsyncClient | None = None,
+    shape: str = "chat",
 ) -> dict[str, Any]:
     owns_client = client is None
     http = client or httpx.AsyncClient(timeout=timeout)
@@ -54,14 +55,34 @@ async def complete(
         parsed = json.loads(text)
     except json.JSONDecodeError as exc:
         raise AssistantModelError("model_rejected", retryable=False) from exc
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("text"), str) or not isinstance(parsed.get("citations"), list):
+    if not isinstance(parsed, dict):
+        raise AssistantModelError("model_rejected", retryable=False)
+    if shape == "brief":
+        follow = _strings(parsed.get("followUps"))
+        if not isinstance(parsed.get("reasonText"), str) or not isinstance(parsed.get("contextText"), str) or follow is None:
+            raise AssistantModelError("model_rejected", retryable=False)
+        return {
+            "reasonText": parsed["reasonText"].strip(),
+            "contextText": parsed["contextText"].strip(),
+            "followUps": follow,
+        }
+    if not isinstance(parsed.get("text"), str) or not isinstance(parsed.get("citations"), list):
         raise AssistantModelError("model_rejected", retryable=False)
     citations = []
     for item in parsed["citations"]:
         if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not isinstance(item.get("as_of"), str):
             raise AssistantModelError("model_rejected", retryable=False)
         citations.append({"id": item["id"], "as_of": item["as_of"]})
-    return {"text": parsed["text"].strip(), "citations": citations}
+    follow = _strings(parsed.get("followUps", []))
+    if follow is None:
+        raise AssistantModelError("model_rejected", retryable=False)
+    return {"text": parsed["text"].strip(), "citations": citations, "followUps": follow}
+
+
+def _strings(value: Any) -> list[str] | None:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return None
+    return value
 
 
 def _output_text(body: dict[str, Any]) -> str:

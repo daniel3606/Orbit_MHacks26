@@ -1,9 +1,40 @@
-import { Tabs } from 'expo-router';
-import { Easing, Image, type ImageSourcePropType } from 'react-native';
+import { Tabs, useIsFocused } from 'expo-router';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { Image, StyleSheet, type ImageSourcePropType } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { colors, font } from '@/ui/theme';
 
 const ICON = 26;
+const FADE_IN = { duration: 280, easing: Easing.out(Easing.cubic) };
+
+/**
+ * Fades a tab in each time it gains focus. The navigator's own `animation: 'fade'` drives scene
+ * opacity with the core Animated native driver, and on the New Architecture that opacity can be
+ * left at 0 when a detached tab is reattached — the tab then stays blank until the next switch.
+ * Reanimated commits its values to the view, so the tab always ends up visible.
+ */
+function TabScene({ children }: { children: ReactNode }) {
+  const focused = useIsFocused();
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(1);
+  const firstFocus = useRef(true);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+
+  useEffect(() => {
+    if (!focused) return;
+    // The tab shown at launch appears at once, as before.
+    if (firstFocus.current || reduceMotion) {
+      firstFocus.current = false;
+      opacity.set(1);
+      return;
+    }
+    opacity.set(0);
+    opacity.set(withTiming(1, FADE_IN));
+  }, [focused, opacity, reduceMotion]);
+
+  return <Animated.View style={[styles.scene, style]}>{children}</Animated.View>;
+}
 
 function tabIcon(active: ImageSourcePropType, inactive: ImageSourcePropType) {
   return function TabIcon({ focused }: { focused: boolean }) {
@@ -32,12 +63,8 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontFamily: font.regular, fontSize: 11 },
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
-        animation: 'fade',
-        transitionSpec: {
-          animation: 'timing',
-          config: { duration: 280, easing: Easing.out(Easing.cubic) },
-        },
-      }}>
+      }}
+      screenLayout={({ children }) => <TabScene>{children}</TabScene>}>
       <Tabs.Screen
         name="index"
         options={{
@@ -92,3 +119,7 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  scene: { flex: 1 },
+});
