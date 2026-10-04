@@ -86,10 +86,7 @@ export default function RootLayout() {
           }}>
           <Stack.Protected guard={hasProfile}>
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="edit-preferences"
-              options={{ presentation: 'modal', headerShown: true, title: 'Edit preferences' }}
-            />
+            <Stack.Screen name="edit-preferences" />
             <Stack.Screen name="stock/[ticker]" />
             <Stack.Screen name="watchlist" />
             <Stack.Screen
