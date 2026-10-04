@@ -12,6 +12,8 @@ export const colors = {
   surface: '#140C1C',
   surfaceRaised: '#1C1228',
   border: '#3A2450',
+  /** Hairline between list rows. */
+  divider: 'rgba(227, 227, 227, 0.12)',
   text: '#E3E3E3',
   textMuted: '#A39AAD',
   /** Secondary figures on the trade ticket. */

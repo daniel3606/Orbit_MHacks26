@@ -1,7 +1,9 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useLayoutEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { PillButton } from '@/features/onboarding/ui';
 import { QuestionBlock, QUESTIONS } from '@/features/onboarding/questions';
 import { updatePreferences } from '@/features/profile/actions';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
@@ -9,8 +11,10 @@ import type { RealtimeSnapshot } from '@/realtime/connection';
 import { messageFor, toAppError } from '@/realtime/errors';
 import { useRealtime } from '@/realtime/hooks';
 import { draftFromProfile, useDraft, validateDraft, type Draft } from '@/state/onboarding-draft';
-import { Banner, Button, Screen } from '@/ui/components';
-import { space } from '@/ui/theme';
+import { Banner, Screen } from '@/ui/components';
+import { colors, font, HIT, space } from '@/ui/theme';
+
+const backIcon = require('../../assets/icon/arrow-back.svg');
 
 function sameDraft(a: Draft, b: Draft) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -70,13 +74,27 @@ export default function EditPreferencesScreen() {
 
   return (
     <Screen
-      edges={['bottom']}
-      footer={
-        <>
-          <Button label="Save changes" busy={saving} disabled={!live || !dirty} onPress={save} />
-          <Button label="Cancel" kind="secondary" disabled={saving} onPress={() => router.back()} />
-        </>
-      }>
+      edges={['top', 'bottom']}
+      header={
+        <View style={styles.nav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            accessibilityHint={dirty ? 'Discards your changes' : undefined}
+            onPress={() => router.back()}
+            disabled={saving}
+            hitSlop={8}
+            style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}>
+            <Image source={backIcon} style={styles.backIcon} contentFit="contain" accessible={false} />
+          </Pressable>
+          <Text style={styles.title} accessibilityRole="header">
+            Edit preferences
+          </Text>
+          <View style={styles.navButton} />
+        </View>
+      }
+      footerBorder={false}
+      footer={<PillButton label="Save changes" compact busy={saving} disabled={!live || !dirty} onPress={save} />}>
       <ConnectionBanner />
       {newerOnServer || error?.code === 'profile_version_conflict' ? (
         <Banner
@@ -87,7 +105,7 @@ export default function EditPreferencesScreen() {
         />
       ) : null}
       {error && error.code !== 'profile_version_conflict' ? <Banner tone="danger" title="Not saved" body={error.text} /> : null}
-      <View style={{ gap: space.xxl }}>
+      <View style={styles.questions}>
         {QUESTIONS.map(q => (
           <QuestionBlock key={q.key} question={q} compact />
         ))}
@@ -95,3 +113,18 @@ export default function EditPreferencesScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  nav: {
+    minHeight: HIT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: -space.sm,
+  },
+  navButton: { width: HIT, height: HIT, alignItems: 'center', justifyContent: 'center' },
+  backIcon: { width: 35, height: 35 },
+  pressed: { opacity: 0.7 },
+  title: { fontFamily: font.semibold, fontSize: 17, lineHeight: 22, color: colors.text },
+  questions: { gap: space.xxl },
+});
