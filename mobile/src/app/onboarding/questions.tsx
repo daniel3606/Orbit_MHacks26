@@ -62,6 +62,7 @@ export default function QuestionsScreen() {
     <Screen
       // A fresh scroll position for each question.
       key={index}
+      maxWidth={430}
       header={
         <View style={styles.header}>
           <BrandHeader onBack={back} />
