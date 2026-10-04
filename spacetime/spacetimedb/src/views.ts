@@ -7,6 +7,7 @@ import spacetimedb, {
   paperBinding,
   paperOrder,
   paperPosition,
+  assistantMessage,
   profileBranding,
   recommendation,
   recommendationGeneration,
@@ -247,5 +248,87 @@ export const workerPaperAccount = spacetimedb.view(
       return ctx.db.paperAccount.owner.find(row.owner) ?? undefined;
     }
     return undefined;
+  }
+);
+
+const ASSISTANT_MESSAGE_LIMIT = 30;
+
+/** The caller's assistant transcript, newest window only. */
+export const myAssistantMessages = spacetimedb.view(
+  { name: 'my_assistant_messages', public: true },
+  t.array(assistantMessage.rowType),
+  ctx =>
+    [...ctx.db.assistantMessage.by_owner.filter(ctx.sender)]
+      .sort((a, b) => a.sequence - b.sequence)
+      .slice(-ASSISTANT_MESSAGE_LIMIT)
+);
+
+/**
+ * Paper positions for the owner of an assistant job this worker currently
+ * holds. Other callers, and owners without the bound paper account, get nothing.
+ */
+export const workerAssistantPositions = spacetimedb.view(
+  { name: 'worker_assistant_positions', public: true },
+  t.array(paperPosition.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return [];
+    const binding = ctx.db.paperBinding.slot.find('demo');
+    const out = [];
+    const seen = new Set<string>();
+    for (const row of ctx.db.job.status.filter(JOB_STATUS.running)) {
+      if (!row.leaseOwner || !row.leaseOwner.isEqual(ctx.sender)) continue;
+      if (row.kind !== 'answer_message' && row.kind !== 'home_brief') continue;
+      if (!binding || !binding.owner.isEqual(row.owner)) continue;
+      const key = row.owner.toHexString();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      for (const position of ctx.db.paperPosition.by_owner.filter(row.owner)) out.push(position);
+    }
+    return out;
+  }
+);
+
+/** Transcript rows for an assistant job this worker holds. */
+export const workerAssistantMessages = spacetimedb.view(
+  { name: 'worker_assistant_messages', public: true },
+  t.array(assistantMessage.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return [];
+    const out = [];
+    const seen = new Set<string>();
+    for (const row of ctx.db.job.status.filter(JOB_STATUS.running)) {
+      if (!row.leaseOwner || !row.leaseOwner.isEqual(ctx.sender)) continue;
+      if (row.kind !== 'answer_message' && row.kind !== 'home_brief') continue;
+      const key = row.owner.toHexString();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const messages = [...ctx.db.assistantMessage.by_owner.filter(row.owner)].sort((a, b) => a.sequence - b.sequence);
+      for (const message of messages.slice(-ASSISTANT_MESSAGE_LIMIT)) out.push(message);
+    }
+    return out;
+  }
+);
+
+/** Current-generation recommendations for an assistant job this worker holds. */
+export const workerAssistantRecommendations = spacetimedb.view(
+  { name: 'worker_assistant_recommendations', public: true },
+  t.array(recommendation.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return [];
+    const out = [];
+    const seen = new Set<string>();
+    for (const row of ctx.db.job.status.filter(JOB_STATUS.running)) {
+      if (!row.leaseOwner || !row.leaseOwner.isEqual(ctx.sender)) continue;
+      if (row.kind !== 'answer_message' && row.kind !== 'home_brief') continue;
+      const key = row.owner.toHexString();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const current = ctx.db.recommendationGeneration.owner.find(row.owner);
+      if (!current) continue;
+      for (const item of ctx.db.recommendation.by_owner_generation.filter([row.owner, current.generation])) {
+        out.push(item);
+      }
+    }
+    return out;
   }
 );

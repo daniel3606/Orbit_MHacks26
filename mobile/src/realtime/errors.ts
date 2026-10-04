@@ -29,6 +29,9 @@ const MESSAGES: Record<string, string> = {
   invalid_order_amount: 'Enter a share quantity or a dollar amount, not both.',
   session_rejected: 'The server rejected the saved session.',
   identity_changed: 'The server returned a different identity for the saved session.',
+  invalid_message_length: 'Keep the question under 500 characters.',
+  invalid_request_key: 'That question could not be sent. Try again.',
+  assistant_unavailable: 'Orbit cannot answer right now.',
 };
 
 export function messageFor(code: string): string {

@@ -60,8 +60,16 @@ const GLOW_BLUR = 8;
 
 type Segment = { x1: number; y1: number; x2: number; y2: number };
 
-/** Endpoints, plus any close that is a local high or low. */
+/** Above this many closes, local turns are too dense to read as stars. */
+const DENSE_SERIES = 12;
+
+/** Endpoints, plus any close that is a local high or low. Long series keep only the endpoints and the range extremes. */
 function starIndexes(values: number[]): number[] {
+  if (values.length > DENSE_SERIES) {
+    const high = values.indexOf(Math.max(...values));
+    const low = values.indexOf(Math.min(...values));
+    return [...new Set([0, high, low, values.length - 1])].sort((a, b) => a - b);
+  }
   const stars: number[] = [];
   values.forEach((value, index) => {
     if (index === 0 || index === values.length - 1) {
@@ -106,6 +114,10 @@ export function StockGraph({
   points,
   compact = false,
   plain = false,
+  hero = false,
+  height,
+  changeLabel,
+  baseline: reference,
 }: {
   title?: string;
   price: number | null;
@@ -116,6 +128,14 @@ export function StockGraph({
   compact?: boolean;
   /** Price as `7701.61 +12.55 (+0.36%)` instead of currency. */
   plain?: boolean;
+  /** Larger price, for the top of a stock's own screen. */
+  hero?: boolean;
+  /** Chart height in points. */
+  height?: number;
+  /** Period the change covers, e.g. "Today". Read after the change. */
+  changeLabel?: string;
+  /** Price for the dashed reference line. Defaults to the average of the drawn prices. */
+  baseline?: number | null;
 }) {
   const [width, setWidth] = useState(0);
   const labelId = useId();
@@ -124,18 +144,19 @@ export function StockGraph({
   const fraction = price != null && previousClose != null && previousClose > 0 ? price / previousClose - 1 : null;
   const positive = (fraction ?? 0) >= 0;
   const changeColor = fraction == null ? colors.textMuted : positive ? colors.success : colors.danger;
-  const chartHeight = compact ? 118 : CHART_HEIGHT;
+  const chartHeight = height ?? (compact ? 118 : CHART_HEIGHT);
   const chart = width > 0 && series.length >= 2 ? plot(series, width, chartHeight, compact) : null;
   const plotted = chart?.points ?? [];
   const mean = series.length >= 2 ? series.reduce((sum, value) => sum + value, 0) / series.length : null;
-  const baseline = chart && mean != null ? chart.yOf(mean) : null;
+  const baselineValue = reference ?? mean;
+  const baseline = chart && baselineValue != null ? chart.yOf(baselineValue) : null;
 
   const summary =
     price == null
       ? 'Price unavailable'
       : fraction == null || amount == null
         ? money(price)
-        : `${money(price)}, ${signedPct(fraction)} versus previous close`;
+        : `${money(price)}, ${signedPct(fraction)} ${changeLabel ? changeLabel.toLowerCase() : 'versus previous close'}`;
 
   const stars = starIndexes(series);
   const starSet = new Set(stars);
@@ -171,13 +192,18 @@ export function StockGraph({
               ) : null}
             </View>
           ) : (
-            <View style={styles.priceRow} accessibilityRole="text" accessibilityLabel={summary} nativeID={labelId}>
-              <T variant="display" style={styles.price}>
+            <View style={[styles.priceRow, hero && styles.heroRow]} accessibilityRole="text" accessibilityLabel={summary} nativeID={labelId}>
+              <T variant="display" style={[styles.price, hero && styles.heroPrice]}>
                 {price == null ? '—' : money(price)}
               </T>
               {amount != null && fraction != null ? (
-                <T variant="label" color={changeColor} style={styles.change}>
+                <T variant="label" color={changeColor} style={[styles.change, hero && styles.heroChange]}>
                   {plain ? plainChange(amount, fraction) : changeCopy(amount, fraction)}
+                  {changeLabel ? (
+                    <T variant="label" muted style={[styles.change, hero && styles.heroChange, styles.changeLabel]}>
+                      {` ${changeLabel}`}
+                    </T>
+                  ) : null}
                 </T>
               ) : null}
             </View>
@@ -324,5 +350,26 @@ const styles = StyleSheet.create({
     fontFamily: font.semibold,
     fontSize: 15,
     lineHeight: 20,
+  },
+  /** Change sits under the price so the card keeps its height across ranges. */
+  heroRow: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 2,
+  },
+  heroPrice: {
+    fontFamily: font.semibold,
+    fontSize: 32,
+    lineHeight: 40,
+    letterSpacing: 0.5,
+    fontVariant: ['tabular-nums'],
+  },
+  heroChange: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontVariant: ['tabular-nums'],
+  },
+  changeLabel: {
+    fontFamily: font.medium,
   },
 });

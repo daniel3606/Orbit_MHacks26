@@ -431,6 +431,32 @@ export const paperOrder = table(
   }
 );
 
+/**
+ * One caller's assistant transcript. Private. `clientKey` makes a repeated tap
+ * the same message. The model never writes this table directly.
+ */
+export const assistantMessage = table(
+  {
+    name: 'assistant_message',
+    indexes: [
+      { accessor: 'by_owner', algorithm: 'btree', columns: ['owner'] },
+      { accessor: 'by_owner_key', algorithm: 'btree', columns: ['owner', 'clientKey'] },
+    ],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity(),
+    sequence: t.u32(),
+    role: t.string(), // 'user' | 'assistant'
+    kind: t.string(), // 'chat' | 'brief'
+    body: t.string(),
+    citations: t.string(),
+    status: t.string(), // 'pending' | 'complete' | 'failed'
+    clientKey: t.string(),
+    createdAt: t.timestamp(),
+  }
+);
+
 /** Repeating schedule that enqueues shared market ingestion (not user commands). */
 export const marketSchedule = table(
   { name: 'market_schedule' },
@@ -463,6 +489,7 @@ const spacetimedb = schema({
   paperAccount,
   paperPosition,
   paperOrder,
+  assistantMessage,
   marketSchedule,
 });
 export default spacetimedb;

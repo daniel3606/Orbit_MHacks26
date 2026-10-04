@@ -42,6 +42,16 @@ export function createPaperOrder(input: {
   );
 }
 
+/** Asks the server to write today's home introduction. The owner is the connection. */
+export function requestHomeBrief(clientKey: string) {
+  return realtime.call(conn => conn.reducers.requestHomeBrief({ clientKey }));
+}
+
+/** Sends one question. The same clientKey is idempotent, so a retried tap cannot double-send. */
+export function askOrbit(clientKey: string, text: string) {
+  return realtime.call(conn => conn.reducers.enqueueAssistantMessage({ clientKey, text }));
+}
+
 export function requestBackendCheck(): Promise<string> {
   const requestKey = `check-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   return realtime.call(conn => conn.reducers.requestBackendCheck({ requestKey })).then(() => requestKey);

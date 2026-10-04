@@ -14,6 +14,10 @@ export const colors = {
   border: '#3A2450',
   text: '#E3E3E3',
   textMuted: '#A39AAD',
+  /** Secondary figures on the trade ticket. */
+  textSubtle: '#999999',
+  /** The empty "$0" on the trade ticket, before anything is typed. */
+  amountEmpty: '#2A2733',
   tabActive: '#FFFFFF',
   tabInactive: '#999999',
   accent: '#E8C872',
@@ -29,6 +33,8 @@ export const colors = {
   warning: '#F2B36B',
   danger: '#FF8A8A',
   selection: '#2A1438',
+  /** Selected chart range. */
+  rangeActive: '#2F0C48',
 } as const;
 
 /** Top, middle, end. Applied as a vertical fill behind every screen. */

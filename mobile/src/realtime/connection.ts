@@ -190,6 +190,17 @@ export type PaperPositionVM = {
   marketValueMicros: string | null;
   unrealizedPlMicros: string | null;
 };
+export type AssistantMessageVM = {
+  id: string;
+  sequence: number;
+  role: string;
+  kind: string;
+  body: string;
+  citations: string;
+  status: string;
+  clientKey: string;
+  createdAt: Date;
+};
 export type PaperOrderVM = {
   clientOrderKey: string;
   ticker: string;
@@ -231,6 +242,9 @@ const EMPTY_MARKET: MarketVM = {
   capabilities: [],
 };
 
+/** How long the market subscription outlives its last screen. */
+const MARKET_RELEASE_DELAY_MS = 2000;
+
 const micros = (v: bigint) => Number(v) / 1_000_000;
 
 export type RealtimeSnapshot = {
@@ -251,6 +265,7 @@ export type RealtimeSnapshot = {
   paperAccount: PaperAccountVM | null;
   paperPositions: PaperPositionVM[];
   paperOrders: PaperOrderVM[];
+  assistantMessages: AssistantMessageVM[];
   market: MarketVM;
   diagnostics: Diagnostics;
 };
@@ -277,6 +292,7 @@ function initialSnapshot(): RealtimeSnapshot {
     paperAccount: null,
     paperPositions: [],
     paperOrders: [],
+    assistantMessages: [],
     market: EMPTY_MARKET,
     diagnostics: {
       uri: config.spacetimeUri,
@@ -309,6 +325,8 @@ class ConnectionManager {
   private jobObservations = new Map<string, { updatedAtMicros: bigint; observedAt: Date }>();
   private marketRefs = 0;
   private marketHandle: { unsubscribe(): void; isActive(): boolean } | null = null;
+  /** Pending teardown after the last market screen lets go. */
+  private marketTeardown: ReturnType<typeof setTimeout> | null = null;
 
   // ---- store plumbing (useSyncExternalStore) ----
 
@@ -461,6 +479,7 @@ class ConnectionManager {
         tables.myPaperAccount,
         tables.myPaperPositions,
         tables.myPaperOrders,
+        tables.myAssistantMessages,
       ]);
   }
 
@@ -480,6 +499,7 @@ class ConnectionManager {
       conn.db.myPaperAccount,
       conn.db.myPaperPositions,
       conn.db.myPaperOrders,
+      conn.db.myAssistantMessages,
       conn.db.stock,
       conn.db.marketQuote,
       conn.db.trendSignal,
@@ -641,6 +661,19 @@ class ConnectionManager {
           marketValueMicros: row.marketValueMicros?.toString() ?? null,
           unrealizedPlMicros: row.unrealizedPlMicros?.toString() ?? null,
         })),
+        assistantMessages: [...conn.db.myAssistantMessages.iter()]
+          .map(row => ({
+            id: row.id.toString(),
+            sequence: row.sequence,
+            role: row.role,
+            kind: row.kind,
+            body: row.body,
+            citations: row.citations,
+            status: row.status,
+            clientKey: row.clientKey,
+            createdAt: toDate(row.createdAt),
+          }))
+          .sort((a, b) => a.sequence - b.sequence),
         paperOrders: [...conn.db.myPaperOrders.iter()].map(row => ({
           clientOrderKey: row.clientOrderKey,
           ticker: row.ticker,
@@ -780,6 +813,10 @@ class ConnectionManager {
 
   /** Call when a market screen gains focus; returns the release function. */
   acquireMarket(): () => void {
+    if (this.marketTeardown) {
+      clearTimeout(this.marketTeardown);
+      this.marketTeardown = null;
+    }
     this.marketRefs += 1;
     if (this.marketRefs === 1 && this.conn && this.snapshot.status === 'ready') {
       const gen = this.generation;
@@ -790,7 +827,12 @@ class ConnectionManager {
       if (released) return;
       released = true;
       this.marketRefs -= 1;
-      if (this.marketRefs === 0) {
+      if (this.marketRefs > 0) return;
+      // A screen handing off to the next one (stock → trade ticket) releases
+      // before the next acquires. Waiting keeps one subscription across the handoff.
+      this.marketTeardown = setTimeout(() => {
+        this.marketTeardown = null;
+        if (this.marketRefs > 0) return;
         try {
           if (this.marketHandle?.isActive()) this.marketHandle.unsubscribe();
         } catch {
@@ -798,7 +840,7 @@ class ConnectionManager {
         }
         this.marketHandle = null;
         this.patch({ market: EMPTY_MARKET });
-      }
+      }, MARKET_RELEASE_DELAY_MS);
     };
   }
 
@@ -864,6 +906,7 @@ class ConnectionManager {
       paperAccount: null,
       paperPositions: [],
       paperOrders: [],
+      assistantMessages: [],
     });
   }
 

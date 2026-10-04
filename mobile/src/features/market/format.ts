@@ -4,6 +4,14 @@ export function money(value: number, currency = 'USD'): string {
   return value.toLocaleString('en-US', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Short venue name, e.g. "NASDAQ NMS - GLOBAL MARKET" → "Nasdaq". */
+export function exchangeLabel(exchange: string): string {
+  const upper = exchange.toUpperCase();
+  if (upper.startsWith('NASDAQ')) return 'Nasdaq';
+  if (upper.startsWith('NEW YORK STOCK EXCHANGE') || upper.startsWith('NYSE')) return 'NYSE';
+  return exchange.split(' - ')[0].replace(/,?\s*INC\.?$/i, '');
+}
+
 export function signedPct(fraction: number, digits = 2): string {
   const pct = fraction * 100;
   return `${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(digits)}%`;

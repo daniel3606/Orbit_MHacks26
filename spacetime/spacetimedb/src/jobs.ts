@@ -18,6 +18,8 @@ export const JOB_KIND = {
   ingestMarket: 'ingest_market',
   submitPaperOrder: 'submit_paper_order',
   reconcilePaperAccount: 'reconcile_paper_account',
+  answerMessage: 'answer_message',
+  homeBrief: 'home_brief',
 } as const;
 
 const KNOWN_JOB_KINDS: readonly string[] = Object.values(JOB_KIND);
@@ -41,7 +43,7 @@ export function plusSeconds(ts: Timestamp, seconds: number): Timestamp {
   return new Timestamp(ts.microsSinceUnixEpoch + BigInt(seconds) * MICROS_PER_SECOND);
 }
 
-function isActive(status: string): boolean {
+export function isActiveStatus(status: string): boolean {
   return (
     status === JOB_STATUS.queued ||
     status === JOB_STATUS.running ||
@@ -49,12 +51,12 @@ function isActive(status: string): boolean {
   );
 }
 
-function findByRequestKey(ctx: Ctx, owner: Identity, requestKey: string) {
+export function findByRequestKey(ctx: Ctx, owner: Identity, requestKey: string) {
   for (const row of ctx.db.job.by_owner_request.filter([owner, requestKey])) return row;
   return undefined;
 }
 
-function insertJob(
+export function insertJob(
   ctx: Ctx,
   owner: Identity,
   kind: string,
@@ -120,10 +122,10 @@ export function enqueuePaperSubmit(ctx: Ctx, owner: Identity, clientOrderKey: st
  */
 export function enqueuePaperReconcile(ctx: Ctx, owner: Identity, delaySeconds: number) {
   for (const row of ctx.db.job.owner.filter(owner)) {
-    if (row.kind === JOB_KIND.reconcilePaperAccount && isActive(row.status)) return;
+    if (row.kind === JOB_KIND.reconcilePaperAccount && isActiveStatus(row.status)) return;
   }
   const terminal = [...ctx.db.job.owner.filter(owner)]
-    .filter(row => row.kind === JOB_KIND.reconcilePaperAccount && !isActive(row.status))
+    .filter(row => row.kind === JOB_KIND.reconcilePaperAccount && !isActiveStatus(row.status))
     .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch));
   for (const old of terminal.slice(PAPER_RECONCILE_RETENTION - 1)) ctx.db.job.jobId.delete(old.jobId);
 
@@ -151,7 +153,7 @@ export function enqueueMarketIngest(ctx: Ctx, reason: string) {
   }
   const owner = ctx.databaseIdentity;
   const terminal = [...ctx.db.job.owner.filter(owner)]
-    .filter(j => j.kind === JOB_KIND.ingestMarket && !isActive(j.status))
+    .filter(j => j.kind === JOB_KIND.ingestMarket && !isActiveStatus(j.status))
     .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch));
   for (const old of terminal.slice(SYSTEM_JOB_RETENTION - 1)) ctx.db.job.jobId.delete(old.jobId);
 
@@ -232,7 +234,7 @@ export const requestBackendCheck = spacetimedb.reducer(
 
     let active = 0;
     for (const row of ctx.db.job.owner.filter(ctx.sender)) {
-      if (row.kind === JOB_KIND.backendCheck && isActive(row.status)) active++;
+      if (row.kind === JOB_KIND.backendCheck && isActiveStatus(row.status)) active++;
     }
     if (active >= MAX_ACTIVE_COMMANDS_PER_OWNER) throw new SenderError('rate_limited');
 
