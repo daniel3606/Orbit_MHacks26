@@ -9,12 +9,22 @@ function sortedCloses(closes: ClosePoint[] | undefined): ClosePoint[] {
     .sort((a, b) => (a.sessionDate < b.sessionDate ? -1 : a.sessionDate > b.sessionDate ? 1 : 0));
 }
 
+type TaggedClose = { close: number; date: string | null };
+
 /** The live price replaces the newest close when it is a different print, so the window keeps its length. */
 function withLive(window: number[], size: number, quote?: { price: number } | null): number[] {
+  return withLiveDated(
+    window.map(close => ({ close, date: null })),
+    size,
+    quote,
+  ).map(point => point.close);
+}
+
+function withLiveDated(window: TaggedClose[], size: number, quote?: { price: number } | null): TaggedClose[] {
   if (!quote || quote.price <= 0) return window;
   const last = window[window.length - 1];
-  if (last != null && Math.abs(last - quote.price) <= 0.005) return window;
-  return [...window.slice(-(size - 1)), quote.price];
+  if (last != null && Math.abs(last.close - quote.price) <= 0.005) return window;
+  return [...window.slice(-(size - 1)), { close: quote.price, date: null }];
 }
 
 /**
@@ -109,20 +119,11 @@ const RANGE_SESSIONS: Record<Exclude<Range, '1D' | 'YTD' | 'MAX'>, number> = {
 export type RangeSeries = {
   /** Prices, oldest first. */
   points: number[];
+  /** Session date for each price. Null is the live print, which has no session close yet. */
+  dates: (string | null)[];
   /** Price the change is measured from. */
   base: number;
-  /** Reads after the change figure, e.g. "Past month". */
-  label: string;
 };
-
-function shortDate(isoDate: string): string {
-  const [y, m, d] = isoDate.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
-}
 
 /**
  * Prices for one chart range, or null when the published history does not
@@ -136,32 +137,51 @@ export function rangeSeries(
 ): RangeSeries | null {
   if (range === '1D') {
     if (!quote || quote.price <= 0 || quote.previousClose <= 0) return null;
-    return { points: [quote.previousClose, quote.price], base: quote.previousClose, label: 'Today' };
+    return {
+      points: [quote.previousClose, quote.price],
+      dates: [null, null],
+      base: quote.previousClose,
+    };
   }
 
   const history = sortedCloses(closes);
   let picked: ClosePoint[];
-  let label: string;
   if (range === 'MAX') {
     picked = history;
-    label = history.length > 0 ? `Since ${shortDate(history[0].sessionDate)}` : '';
   } else if (range === 'YTD') {
     const year = String(now.getFullYear());
     // History has to start before this year, or the first session of the year is missing.
     if (history.length === 0 || history[0].sessionDate.slice(0, 4) >= year) return null;
     const before = history.filter(point => point.sessionDate.slice(0, 4) < year);
     picked = [before[before.length - 1], ...history.filter(point => point.sessionDate.slice(0, 4) >= year)];
-    label = 'Year to date';
   } else {
     const sessions = RANGE_SESSIONS[range];
     // One extra close is the starting price for the change.
     if (history.length < sessions + 1) return null;
     picked = history.slice(-(sessions + 1));
-    label = { '5D': 'Past 5 days', '1M': 'Past month', '6M': 'Past 6 months', '5Y': 'Past 5 years' }[range];
   }
 
-  const closesOnly = picked.map(point => point.close);
-  const points = range === 'MAX' ? withLive(closesOnly, closesOnly.length + 1, quote) : withLive(closesOnly, closesOnly.length, quote);
-  if (points.length < 2) return null;
-  return { points, base: points[0], label };
+  const dated = picked.map(point => ({ close: point.close, date: point.sessionDate }));
+  const window =
+    range === 'MAX' ? withLiveDated(dated, dated.length + 1, quote) : withLiveDated(dated, dated.length, quote);
+  if (window.length < 2) return null;
+  return {
+    points: window.map(point => point.close),
+    dates: window.map(point => point.date),
+    base: window[0].close,
+  };
+}
+
+/** The chart opens on the longest range that has real session closes. 1D is only two prices. */
+const OPEN_ON: Range[] = ['6M', '1M', '5D', 'YTD', 'MAX', '1D'];
+
+export function preferredRange(
+  closes: ClosePoint[] | undefined,
+  quote?: { price: number; previousClose: number } | null,
+  now = new Date(),
+): Range {
+  for (const candidate of OPEN_ON) {
+    if (rangeSeries(candidate, closes, quote, now)) return candidate;
+  }
+  return '1D';
 }

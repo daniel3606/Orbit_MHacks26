@@ -1,9 +1,10 @@
-import { useId, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useId, useState } from 'react';
+import { PanResponder, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, FeGaussianBlur, Filter, G, Line } from 'react-native-svg';
 
-import { money, signedPct } from '@/features/market/format';
+import { money, sessionLabel, signedPct } from '@/features/market/format';
 import { T } from '@/ui/components';
 import { colors, font, graphFillOpacity, radius, space } from '@/ui/theme';
 
@@ -107,41 +108,74 @@ export function segments(points: Point[], stars: Set<number>, inset: number): Se
   return drawn;
 }
 
+function scrubCaption(date: string | null, index: number, count: number): string {
+  if (date) return sessionLabel(date);
+  if (count === 2 && index === 0) return 'Previous close';
+  if (index === count - 1) return 'Latest price';
+  return 'Earlier close';
+}
+
+function nearestIndex(points: Point[], x: number): number {
+  let best = 0;
+  let bestDist = Infinity;
+  points.forEach((point, index) => {
+    const dist = Math.abs(point.x - x);
+    if (dist < bestDist) {
+      best = index;
+      bestDist = dist;
+    }
+  });
+  return best;
+}
+
 export function StockGraph({
   title,
   price,
   previousClose,
   points,
+  dates,
   compact = false,
   plain = false,
   hero = false,
+  scrub = false,
   height,
-  changeLabel,
   baseline: reference,
+  onScrubbingChange,
 }: {
   title?: string;
   price: number | null;
   previousClose?: number | null;
   /** Real prices, oldest first. Drawn only when at least two values are present. */
   points?: number[];
+  /** Session date aligned with `points`. Null is the live print. */
+  dates?: (string | null)[];
   /** Title and a shorter chart, without the price line. */
   compact?: boolean;
   /** Price as `7701.61 +12.55 (+0.36%)` instead of currency. */
   plain?: boolean;
   /** Larger price, for the top of a stock's own screen. */
   hero?: boolean;
+  /** Drag across the chart to read the price at that point. */
+  scrub?: boolean;
   /** Chart height in points. */
   height?: number;
-  /** Period the change covers, e.g. "Today". Read after the change. */
-  changeLabel?: string;
   /** Price for the dashed reference line. Defaults to the average of the drawn prices. */
   baseline?: number | null;
+  /** True while a finger is on the chart. */
+  onScrubbingChange?: (active: boolean) => void;
 }) {
   const [width, setWidth] = useState(0);
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   const labelId = useId();
-  const series = (points ?? []).filter(value => Number.isFinite(value));
-  const amount = price != null && previousClose != null ? price - previousClose : null;
-  const fraction = price != null && previousClose != null && previousClose > 0 ? price / previousClose - 1 : null;
+  const paired = (points ?? [])
+    .map((value, index) => ({ value, date: dates?.[index] ?? null }))
+    .filter(point => Number.isFinite(point.value));
+  const series = paired.map(point => point.value);
+  const shownIndex = scrub && scrubIndex != null && scrubIndex < series.length ? scrubIndex : null;
+  const shownPrice = shownIndex != null ? series[shownIndex] : price;
+  const amount = shownPrice != null && previousClose != null ? shownPrice - previousClose : null;
+  const fraction =
+    shownPrice != null && previousClose != null && previousClose > 0 ? shownPrice / previousClose - 1 : null;
   const positive = (fraction ?? 0) >= 0;
   const changeColor = fraction == null ? colors.textMuted : positive ? colors.success : colors.danger;
   const chartHeight = height ?? (compact ? 118 : CHART_HEIGHT);
@@ -150,13 +184,53 @@ export function StockGraph({
   const mean = series.length >= 2 ? series.reduce((sum, value) => sum + value, 0) / series.length : null;
   const baselineValue = reference ?? mean;
   const baseline = chart && baselineValue != null ? chart.yOf(baselineValue) : null;
+  const cursor = shownIndex != null ? plotted[shownIndex] : null;
+  const moment = shownIndex != null ? scrubCaption(paired[shownIndex]?.date ?? null, shownIndex, series.length) : null;
 
   const summary =
-    price == null
+    shownPrice == null
       ? 'Price unavailable'
       : fraction == null || amount == null
-        ? money(price)
-        : `${money(price)}, ${signedPct(fraction)} ${changeLabel ? changeLabel.toLowerCase() : 'versus previous close'}`;
+        ? money(shownPrice)
+        : moment
+          ? `${money(shownPrice)} on ${moment}, ${signedPct(fraction)} from the start of this chart`
+          : scrub
+            ? `${money(shownPrice)}, ${signedPct(fraction)} from the start of this chart`
+            : `${money(shownPrice)}, ${signedPct(fraction)} versus previous close`;
+
+  useEffect(() => {
+    if (scrubIndex == null) return;
+    const step = series.length > 40 ? Math.ceil(series.length / 24) : 1;
+    if (scrubIndex % step !== 0 && scrubIndex !== series.length - 1) return;
+    try {
+      void Haptics.selectionAsync();
+    } catch {
+      // Haptics are optional.
+    }
+  }, [scrubIndex, series.length]);
+
+  function choose(x: number) {
+    if (plotted.length < 2) return;
+    const index = nearestIndex(plotted, x);
+    setScrubIndex(current => (current === index ? current : index));
+  }
+
+  function endScrub() {
+    setScrubIndex(null);
+    onScrubbingChange?.(false);
+  }
+
+  const panHandlers = PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dx) > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: event => {
+      onScrubbingChange?.(true);
+      choose(event.nativeEvent.locationX);
+    },
+    onPanResponderMove: event => choose(event.nativeEvent.locationX),
+    onPanResponderRelease: endScrub,
+    onPanResponderTerminate: endScrub,
+  }).panHandlers;
 
   const stars = starIndexes(series);
   const starSet = new Set(stars);
@@ -192,18 +266,25 @@ export function StockGraph({
               ) : null}
             </View>
           ) : (
-            <View style={[styles.priceRow, hero && styles.heroRow]} accessibilityRole="text" accessibilityLabel={summary} nativeID={labelId}>
-              <T variant="display" style={[styles.price, hero && styles.heroPrice]}>
-                {price == null ? '—' : money(price)}
-              </T>
-              {amount != null && fraction != null ? (
-                <T variant="label" color={changeColor} style={[styles.change, hero && styles.heroChange]}>
-                  {plain ? plainChange(amount, fraction) : changeCopy(amount, fraction)}
-                  {changeLabel ? (
-                    <T variant="label" muted style={[styles.change, hero && styles.heroChange, styles.changeLabel]}>
-                      {` ${changeLabel}`}
-                    </T>
-                  ) : null}
+            <View style={styles.quoteBlock} accessibilityRole="text" accessibilityLabel={summary} nativeID={labelId}>
+              <View style={[styles.priceRow, hero && styles.heroRow]}>
+                <T
+                  variant="display"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                  style={[styles.price, hero && styles.heroPrice]}>
+                  {shownPrice == null ? '—' : money(shownPrice)}
+                </T>
+                {amount != null && fraction != null ? (
+                  <T variant="label" color={changeColor} style={[styles.change, hero && styles.heroChange]}>
+                    {plain ? plainChange(amount, fraction) : changeCopy(amount, fraction)}
+                  </T>
+                ) : null}
+              </View>
+              {moment ? (
+                <T variant="caption" muted>
+                  {moment}
                 </T>
               ) : null}
             </View>
@@ -212,6 +293,7 @@ export function StockGraph({
           <View
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
+            {...(scrub ? panHandlers : {})}
             onLayout={event => {
               const next = event.nativeEvent.layout.width;
               setWidth(current => (current === next ? current : next));
@@ -240,6 +322,17 @@ export function StockGraph({
                     strokeWidth={1}
                     strokeDasharray="1.5 6"
                     strokeLinecap="round"
+                  />
+                ) : null}
+                {cursor ? (
+                  <Line
+                    x1={cursor.x}
+                    x2={cursor.x}
+                    y1={8}
+                    y2={chartHeight - 8}
+                    stroke={colors.accent}
+                    strokeOpacity={0.85}
+                    strokeWidth={1}
                   />
                 ) : null}
                 <G filter={`url(#${glowId})`} opacity={GLOW_OPACITY}>
@@ -280,6 +373,7 @@ export function StockGraph({
                     fill={index === starPoints.length - 1 ? colors.accent : colors.graphLine}
                   />
                 ))}
+                {cursor ? <Circle cx={cursor.x} cy={cursor.y} r={DOT_RADIUS + 2} fill={colors.accent} /> : null}
               </Svg>
             ) : (
               <View style={{ height: space.sm }} />
@@ -335,6 +429,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
+  quoteBlock: { gap: 2 },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -351,25 +446,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
-  /** Change sits under the price so the card keeps its height across ranges. */
+  /** Price and change share one line. The price shrinks before the change wraps. */
   heroRow: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: 2,
+    flexWrap: 'nowrap',
+    gap: space.sm,
   },
   heroPrice: {
+    flexShrink: 1,
     fontFamily: font.semibold,
-    fontSize: 32,
-    lineHeight: 40,
-    letterSpacing: 0.5,
+    fontSize: 26,
+    lineHeight: 32,
+    letterSpacing: 0.3,
     fontVariant: ['tabular-nums'],
   },
   heroChange: {
+    flexShrink: 0,
     fontSize: 16,
     lineHeight: 22,
     fontVariant: ['tabular-nums'],
-  },
-  changeLabel: {
-    fontFamily: font.medium,
   },
 });

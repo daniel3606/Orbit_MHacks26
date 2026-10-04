@@ -3,11 +3,14 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState, type ReactNode } from 'react';
-import { LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Path, Svg } from 'react-native-svg';
 
-import { exchangeLabel, formatMicros, formatShares, money, sessionLabel, signedPct, stamp } from '@/features/market/format';
-import { RANGES, rangeSeries, type Range } from '@/features/market/series';
+import { exchangeLabel, formatMicros, formatShares, money, signedPct, stamp } from '@/features/market/format';
+import { RANGES, preferredRange, rangeSeries, type Range } from '@/features/market/series';
+import { stockAnalysis } from '@/features/stock/cases';
+import { useWatchlist } from '@/features/watchlist/store';
 import { labelFor, SECTORS } from '@/features/onboarding/options';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
 import { realtime } from '@/realtime/connection';
@@ -19,7 +22,21 @@ const backIcon = require('../../../assets/icon/arrow-back.svg');
 const chevronIcon = require('../../../assets/icon/chevron-down.svg');
 
 const CHART_HEIGHT = 164;
-const FOOTER_HEIGHT = 55;
+const FOOTER_HEIGHT = 44;
+
+function StarGlyph({ filled }: { filled: boolean }) {
+  return (
+    <Svg width={32} height={32} viewBox="0 0 24 24">
+      <Path
+        d="M12 3.2 14.7 9.1 21 9.7 16.2 14 17.6 20.2 12 16.9 6.4 20.2 7.8 14 3 9.7 9.3 9.1 Z"
+        fill={filled ? colors.accent : 'none'}
+        stroke={filled ? colors.accent : colors.text}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 function fitDetail(coverage: number, fitScore: number): string {
   const coverageText = `Coverage ${coverage.toFixed(2)} of the planned checks. Horizon and style were not scored.`;
@@ -48,13 +65,23 @@ function animateNextLayout() {
   LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
 }
 
-/** One labelled line of analysis, e.g. "Risk: …". */
-function Point({ label, children }: { label: string; children: ReactNode }) {
+/** One side of the analysis. */
+function CaseLine({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   return (
-    <Text style={styles.point}>
-      <Text style={styles.pointLabel}>{label}: </Text>
+    <View style={styles.case}>
+      <Text style={styles.caseLabel}>{title}</Text>
+      <Text style={styles.point}>{body}</Text>
       {children}
-    </Text>
+    </View>
+  );
+}
+
+function TrendNote({ line, basis }: { line: string; basis: string }) {
+  return (
+    <View style={styles.trend}>
+      <Text style={styles.point}>{line}</Text>
+      <Text style={styles.note}>{basis}</Text>
+    </View>
   );
 }
 
@@ -155,9 +182,18 @@ export default function StockDetailScreen() {
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const symbol = typeof ticker === 'string' ? ticker : '';
   const rt = useRealtime();
-  useFocusEffect(useCallback(() => realtime.acquireMarket(), []));
+  const saved = useWatchlist(state => state.tickers.includes(symbol));
+  const toggleWatch = useWatchlist(state => state.toggle);
+  const loadWatchlist = useWatchlist(state => state.load);
+  useFocusEffect(
+    useCallback(() => {
+      realtime.acquireMarket();
+      void loadWatchlist();
+    }, [loadWatchlist]),
+  );
 
-  const [range, setRange] = useState<Range>('1D');
+  const [picked, setPicked] = useState<Range | null>(null);
+  const [holdingChart, setHoldingChart] = useState(false);
   const [positionOpen, setPositionOpen] = useState<boolean | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -172,8 +208,20 @@ export default function StockDetailScreen() {
   const position = rt.paperPositions.find(row => row.ticker === symbol);
   const orders = rt.paperOrders.filter(row => row.ticker === symbol).slice(0, 3);
 
+  const range = picked ?? preferredRange(closes, quote);
   const series = rangeSeries(range, closes, quote);
   const available = (candidate: Range) => rangeSeries(candidate, closes, quote) !== null;
+  const news = discovered?.news ?? null;
+  const longer = range === '1D' || range === '5D' || range === '1M' ? rangeSeries('6M', closes, quote) : null;
+  const analysis = stockAnalysis({
+    symbol,
+    range,
+    points: series?.points ?? [],
+    dayChange: quote && quote.previousClose > 0 ? quote.price / quote.previousClose - 1 : null,
+    trendScore: signal?.status === 'published' ? signal.trendScore : null,
+    longerPoints: longer?.points ?? null,
+    news: news ? { headline: news.headline, source: news.source, url: news.url } : null,
+  });
   // Closed by default when there is nothing held; the person's own toggle wins after that.
   const showPosition = positionOpen ?? !!position;
 
@@ -203,10 +251,31 @@ export default function StockDetailScreen() {
             style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}>
             <Image source={backIcon} style={styles.backIcon} contentFit="contain" accessible={false} />
           </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={saved ? `Remove ${symbol} from watchlist` : `Add ${symbol} to watchlist`}
+            accessibilityState={{ selected: saved }}
+            disabled={!symbol}
+            onPress={() => {
+              try {
+                void Haptics.selectionAsync();
+              } catch {
+                // Haptics are optional.
+              }
+              toggleWatch(symbol);
+            }}
+            hitSlop={8}
+            style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}>
+            <StarGlyph filled={saved} />
+          </Pressable>
         </View>
 
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingBottom: FOOTER_HEIGHT + space.xxl + insets.bottom }]}
+          scrollEnabled={!holdingChart}
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: space.lg + FOOTER_HEIGHT + Math.max(insets.bottom, space.lg) + space.sm },
+          ]}
           showsVerticalScrollIndicator={false}>
           <ConnectionBanner />
           <View style={styles.titleBlock}>
@@ -222,15 +291,17 @@ export default function StockDetailScreen() {
 
           <StockGraph
             hero
+            scrub
             height={CHART_HEIGHT}
             price={quote?.price ?? null}
             previousClose={series?.base ?? quote?.previousClose}
             points={series?.points}
-            changeLabel={series?.label}
+            dates={series?.dates}
             baseline={series?.base}
+            onScrubbingChange={setHoldingChart}
           />
 
-          <RangeSelector value={range} available={available} onChange={setRange} />
+          <RangeSelector value={range} available={available} onChange={setPicked} />
 
           <Text style={styles.source}>
             {quote
@@ -242,26 +313,30 @@ export default function StockDetailScreen() {
             <Text style={styles.sectionTitle} accessibilityRole="header">
               Orbit Analysis
             </Text>
-            {match ? (
-              <>
-                <Point label="Why it matched">{match.matchReason}</Point>
-                <Point label="Recent activity">{match.marketActivity}</Point>
-                <Point label="Risk">{match.riskObservation}</Point>
-                {match.learningNote ? <Text style={styles.note}>{match.learningNote}</Text> : null}
-              </>
-            ) : discovered && rt.discovery ? (
-              <>
-                <Point label="Why it found you">{discovered.reasons.join('. ')}.</Point>
-                <Point label={`In ${rt.discovery.title}`}>{discovered.about}</Point>
-              </>
-            ) : (
+            <CaseLine title="What looks strong" body={analysis.strong}>
+              {analysis.trend?.side === 'strong' ? <TrendNote line={analysis.trend.line} basis={analysis.trend.basis} /> : null}
+            </CaseLine>
+            <CaseLine title="What to watch" body={analysis.watch}>
+              {analysis.trend?.side === 'watch' ? <TrendNote line={analysis.trend.line} basis={analysis.trend.basis} /> : null}
+            </CaseLine>
+            {analysis.context ? (
               <Text style={styles.point}>
-                {symbol} isn’t one of the matches saved for your profile, so Orbit has no reason to give for it.
-                {signal?.status === 'published' && signal.trendScore !== null
-                  ? ` Its Trend Score is ${signal.trendScore.toFixed(1)} through ${sessionLabel(signal.sessionDate)}.`
-                  : ''}
+                <Text style={styles.pointLabel}>6-month context. </Text>
+                {analysis.context}
               </Text>
-            )}
+            ) : null}
+            {analysis.news ? (
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`${analysis.news.name}. ${analysis.news.line}. Opens the story.`}
+                onPress={() => {
+                  void Linking.openURL(analysis.news!.url);
+                }}
+                style={({ pressed }) => [pressed && styles.pressed]}>
+                <Text style={styles.sourceLink}>{analysis.news.line}</Text>
+              </Pressable>
+            ) : null}
+            {match?.learningNote ? <Text style={styles.note}>{match.learningNote}</Text> : null}
           </View>
 
           <View style={styles.drawers}>
@@ -360,7 +435,22 @@ export default function StockDetailScreen() {
             </Drawer>
 
             <Drawer title="News" open={newsOpen} onToggle={() => setNewsOpen(open => !open)}>
-              <Text style={styles.point}>News isn’t connected yet, so there are no headlines for {symbol}.</Text>
+              {news && /^https:\/\//i.test(news.url) ? (
+                <Pressable
+                  accessibilityRole="link"
+                  accessibilityLabel={`${news.source}. ${news.headline}. Opens the story.`}
+                  onPress={() => {
+                    void Linking.openURL(news.url);
+                  }}
+                  style={({ pressed }) => [pressed && styles.pressed]}>
+                  <Text style={styles.note}>{news.source || 'Story'}</Text>
+                  <Text style={styles.point}>{news.headline}</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.point}>
+                  No story is stored for {symbol}. Discover keeps one recent headline for the companies it shows that day.
+                </Text>
+              )}
             </Drawer>
 
           </View>
@@ -383,8 +473,8 @@ export default function StockDetailScreen() {
           accessibilityState={{ disabled: !position }}
           disabled={!position}
           onPress={() => trade('sell')}
-          style={({ pressed }) => [styles.action, styles.sell, !position && styles.disabled, pressed && styles.pressed]}>
-          <Text style={[styles.actionText, styles.sellText]}>Sell</Text>
+          style={({ pressed }) => [styles.action, styles.sell, !position && styles.sellDisabled, pressed && position && styles.pressed]}>
+          <Text style={[styles.actionText, styles.sellText, !position && styles.sellDisabledText]}>Sell</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -402,7 +492,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   fill: { flex: 1 },
   pressed: { opacity: 0.7 },
-  disabled: { opacity: 0.45 },
   nav: {
     height: HIT + space.sm,
     flexDirection: 'row',
@@ -443,8 +532,12 @@ const styles = StyleSheet.create({
   drawerBody: { gap: space.sm, paddingBottom: space.sm },
   chevron: { width: 24, height: 24 },
   chevronOpen: { transform: [{ scaleY: -1 }] },
+  case: { gap: 4 },
+  caseLabel: { fontFamily: font.semibold, fontSize: 16, lineHeight: 22, color: colors.text },
+  trend: { gap: 2 },
   point: { fontFamily: font.regular, fontSize: 14, lineHeight: 20, color: colors.text },
   pointLabel: { fontFamily: font.semibold },
+  sourceLink: { fontFamily: font.medium, fontSize: 13, lineHeight: 18, color: colors.info, textDecorationLine: 'underline' },
   note: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted },
   subheading: { fontFamily: font.semibold, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: space.xs },
   orders: { gap: 0 },
@@ -480,20 +573,22 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     flexDirection: 'row',
-    gap: 18,
+    gap: space.md,
     paddingHorizontal: space.xl,
-    paddingTop: space.xxl,
+    paddingTop: space.lg,
   },
   action: {
     flex: 1,
     height: FOOTER_HEIGHT,
-    borderRadius: 15,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sell: { backgroundColor: colors.secondary },
+  sellDisabled: { backgroundColor: '#241433' },
   buy: { backgroundColor: colors.text },
-  actionText: { fontFamily: font.semibold, fontSize: 20, lineHeight: 26 },
+  actionText: { fontFamily: font.medium, fontSize: 16, lineHeight: 20, letterSpacing: 0.2 },
   sellText: { color: colors.secondaryText },
+  sellDisabledText: { color: '#6E6578' },
   buyText: { color: colors.background },
 });

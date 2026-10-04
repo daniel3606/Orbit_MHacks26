@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { requestPaperSync } from '@/features/profile/actions';
@@ -7,6 +7,8 @@ import { formatMicros, formatShares } from '@/features/market/format';
 import { valueHistory } from '@/features/portfolio/history';
 import { PortfolioDistributionCard } from '@/features/portfolio/PortfolioDistributionCard';
 import { PortfolioValueCard } from '@/features/portfolio/PortfolioValueCard';
+import { WatchlistBlock } from '@/features/watchlist/WatchlistBlock';
+import { useWatchlist } from '@/features/watchlist/store';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
 import { realtime } from '@/realtime/connection';
 import { AppError, messageFor } from '@/realtime/errors';
@@ -36,8 +38,27 @@ export default function PortfolioScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const account = rt.paperAccount;
+  const watchlist = useWatchlist(state => state.tickers);
+  const loadWatchlist = useWatchlist(state => state.load);
   // Session closes for the value line, and names and logos for the holdings.
   useFocusEffect(useCallback(() => realtime.acquireMarket(), []));
+  useEffect(() => {
+    void loadWatchlist();
+  }, [loadWatchlist]);
+
+  function openStock(ticker: string) {
+    router.push({ pathname: '/stock/[ticker]', params: { ticker } });
+  }
+
+  const watchlistBlock = (
+    <WatchlistBlock
+      tickers={watchlist}
+      stocks={rt.market.stocks}
+      quotes={rt.market.quotes}
+      onOpen={openStock}
+      onViewAll={() => router.push('/watchlist')}
+    />
+  );
 
   async function refresh() {
     setError(null);
@@ -61,18 +82,24 @@ export default function PortfolioScreen() {
         <Text style={styles.subtitle}>Virtual money on the Alpaca paper account. Nothing here is a live trade.</Text>
       </View>
       {!rt.paperEnabled ? (
-        <Card>
-          <T variant="heading">Paper trading is not on for this guest</T>
-          <T muted>
-            One designated guest is bound to the paper account. This session cannot see that balance or place an order.
-          </T>
-        </Card>
+        <>
+          <Card>
+            <T variant="heading">Paper trading is not on for this guest</T>
+            <T muted>
+              One designated guest is bound to the paper account. This session cannot see that balance or place an order.
+            </T>
+          </Card>
+          {watchlistBlock}
+        </>
       ) : !account ? (
-        <Card>
-          <T variant="heading">Waiting for the paper account</T>
-          <T muted>The balance appears after Alpaca answers. No amount is shown until then.</T>
-          <Button label="Refresh paper account" kind="secondary" busy={refreshing} onPress={() => void refresh()} />
-        </Card>
+        <>
+          <Card>
+            <T variant="heading">Waiting for the paper account</T>
+            <T muted>The balance appears after Alpaca answers. No amount is shown until then.</T>
+            <Button label="Refresh paper account" kind="secondary" busy={refreshing} onPress={() => void refresh()} />
+          </Card>
+          {watchlistBlock}
+        </>
       ) : (
         <>
           <PortfolioValueCard
@@ -86,12 +113,14 @@ export default function PortfolioScreen() {
             positions={rt.paperPositions}
             cashMicros={account.cashMicros}
             stocks={rt.market.stocks}
-            onOpen={ticker => router.push({ pathname: '/stock/[ticker]', params: { ticker } })}
+            onOpen={openStock}
             onDiscover={() => router.navigate('/discover')}
           />
           <Text style={styles.note}>
             Alpaca buying power {formatMicros(account.buyingPowerMicros)} includes margin. Buys in Orbit are limited to cash.
           </Text>
+
+          {watchlistBlock}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle} accessibilityRole="header">
