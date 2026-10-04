@@ -131,7 +131,7 @@ async def main() -> int:
             )
         )
         if settings.openai_api_key is None:
-            log.warning("OPENAI_API_KEY is unset; home briefs use published data and chat stays unavailable")
+            log.warning("OPENAI_API_KEY is unset; assistant answers use published data without model copy")
 
         worker = Worker(
             gateway,

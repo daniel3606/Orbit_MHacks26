@@ -4,8 +4,8 @@ import { requireConsumer, requireService } from './auth';
 import { JOB_KIND, JOB_STATUS, findByRequestKey, insertJob, isActiveStatus, requireLease } from './jobs';
 
 const MAX_USER_CHARS = 500;
-const MAX_REPLY_CHARS = 1200;
-const MAX_CITATIONS_CHARS = 800;
+const MAX_REPLY_CHARS = 1800;
+const MAX_CITATIONS_CHARS = 2000;
 const MESSAGE_WINDOW = 30;
 const MAX_USER_MESSAGES_PER_WINDOW = 6;
 const WINDOW_SECONDS = 600;
@@ -166,6 +166,22 @@ export const publishAssistantReply = spacetimedb.reducer(
   },
   (ctx, args) => {
     requireService(ctx);
+    if (args.status === 'draft') {
+      if (args.body.length > MAX_REPLY_CHARS) throw new SenderError('invalid_message_length');
+      if (args.citations.length > MAX_CITATIONS_CHARS || !args.citations.startsWith('[')) {
+        throw new SenderError('invalid_citations');
+      }
+      const { row: job, holdsLease } = requireLease(ctx, args.jobId, args.attempt);
+      if (!holdsLease) throw new SenderError('lease_mismatch');
+      if (job.kind !== JOB_KIND.homeBrief) throw new SenderError('invalid_job_kind');
+      if (job.status === JOB_STATUS.succeeded) return;
+      if (job.status !== JOB_STATUS.running) throw new SenderError('job_not_running');
+      let draft;
+      for (const row of ctx.db.assistantMessage.by_owner_key.filter([job.owner, args.replyClientKey])) draft = row;
+      if (!draft || draft.role !== 'assistant') throw new SenderError('message_not_found');
+      ctx.db.assistantMessage.id.update({ ...draft, body: args.body, citations: args.citations, status: 'pending' });
+      return;
+    }
     if (args.status !== 'complete' && args.status !== 'failed') throw new SenderError('invalid_message_status');
     if (args.body.length > MAX_REPLY_CHARS) throw new SenderError('invalid_message_length');
     if (args.citations.length > MAX_CITATIONS_CHARS || !args.citations.startsWith('[')) {

@@ -1,5 +1,4 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -17,8 +16,6 @@ import {
   View,
   type KeyboardEvent,
   type LayoutChangeEvent,
-  type StyleProp,
-  type TextStyle,
 } from 'react-native';
 import Reanimated, {
   Easing as REasing,
@@ -33,11 +30,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { askOrbit, clearOrbitChat, requestHomeBrief } from '@/features/profile/actions';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
-import { chartSeries } from '@/features/market/series';
-import { realtime, type AssistantMessageVM, type StockVM } from '@/realtime/connection';
+import { AnswerFacts } from '@/features/home/AnswerFacts';
+import { quoteAsOf, snapshotMode } from '@/features/home/snapshotMode';
+import { RevealedReply, ThinkingLine } from '@/features/home/StreamingReply';
+import { DailyBriefCard, parseBrief, presentation } from '@/features/home/DailyBrief';
+import { realtime, type AssistantMessageVM } from '@/realtime/connection';
 import { messageFor, toAppError } from '@/realtime/errors';
 import { useRealtime } from '@/realtime/hooks';
-import { StockGraph } from '@/ui/StockGraph';
 import { T } from '@/ui/components';
 import { colors, font, space } from '@/ui/theme';
 
@@ -58,17 +57,14 @@ const bell = require('../../../assets/images/bell-icon.png');
 
 function salutation(now = new Date()): string {
   const hour = now.getHours();
-  if (hour < 12) return 'Good Morning';
-  if (hour < 17) return 'Good Afternoon';
-  return 'Good Evening';
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
-const INTRO = 'I’m looking at today’s prices so I can explain them in plain language.';
-
-const SUGGESTIONS = ['What is a stock?', 'What does my Trend Score mean?', 'How does practice trading work?'];
+const LEARNING = ['What is a stock?', 'What does Trend Score mean?', 'How does practice trading work?'];
 const MAX_QUESTION = 500;
 
-const TYPE_PACE_MS = 16;
 /** Room for the ask sheet before it has been measured. */
 const ASK_CLEARANCE = 132;
 /** The black of the tab bar; the ask sheet uses it so the two read as one surface. */
@@ -76,8 +72,7 @@ const NAV_BLACK = '#000000';
 const MUTED = '#8E8E93';
 const FIELD_EASE = { duration: 220, easing: REasing.out(REasing.cubic) };
 
-function tickersFor(body: string, citations: string, stocks: StockVM[]): string[] {
-  const known = new Set(stocks.map(stock => stock.ticker));
+function tickersFor(citations: string, known: Set<string>): string[] {
   const found: string[] = [];
   const add = (ticker: string) => {
     if (known.has(ticker) && !found.includes(ticker)) found.push(ticker);
@@ -91,14 +86,24 @@ function tickersFor(body: string, citations: string, stocks: StockVM[]): string[
       }
     }
   } catch {
-    // Citations are stored for the server. A bad row just means no chart.
-  }
-  if (found.length > 0) return found.slice(0, 2);
-  for (const stock of stocks) {
-    const named = stock.name.length > 2 && body.includes(stock.name);
-    if (named || new RegExp(`\\b${stock.ticker}\\b`).test(body)) add(stock.ticker);
+    // Citations are stored for the server. A bad row just means no quote header.
   }
   return found.slice(0, 2);
+}
+
+function previousCompany(
+  chat: AssistantMessageVM[],
+  index: number,
+  known: Set<string>,
+): { tickers: string[]; asOf: Record<string, string> } | null {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const message = chat[cursor];
+    if (!message || message.role !== 'assistant' || message.kind !== 'chat' || message.status !== 'complete') continue;
+    const tickers = tickersFor(message.citations, known);
+    if (tickers.length === 0) return null;
+    return { tickers, asOf: quoteAsOf(message.citations, tickers) };
+  }
+  return null;
 }
 
 function lastQuestionIndex(chat: AssistantMessageVM[]): number {
@@ -156,81 +161,16 @@ function paragraphs(text: string): string[] {
   return parts.length > 0 ? parts : [text];
 }
 
-/** Reveals `text` one character at a time, with a light tick on each key. */
-function TypedText({
-  text,
-  active,
-  onDone,
-  style,
-  accessibilityRole,
-}: {
-  text: string;
-  active: boolean;
-  onDone?: () => void;
-  style?: StyleProp<TextStyle>;
-  accessibilityRole?: 'header' | 'text';
-}) {
-  const [seen, setSeen] = useState(text);
-  const [count, setCount] = useState(0);
-  const [caretOn, setCaretOn] = useState(true);
-  if (seen !== text) {
-    setSeen(text);
-    setCount(0);
-  }
-  const done = !active || count >= text.length;
-
-  useEffect(() => {
-    if (!active || count >= text.length) return;
-    const timer = setTimeout(() => {
-      const next = text[count];
-      setCount(current => current + 1);
-      if (next && !/\s/.test(next)) {
-        try {
-          void Haptics.selectionAsync();
-        } catch {
-          // The dev client needs a rebuild before the haptic module is available.
-        }
-      }
-    }, TYPE_PACE_MS);
-    return () => clearTimeout(timer);
-  }, [active, count, text]);
-
-  useEffect(() => {
-    if (active && count >= text.length) onDone?.();
-  }, [active, count, onDone, text.length]);
-
-  useEffect(() => {
-    if (done) return;
-    const timer = setInterval(() => setCaretOn(on => !on), 460);
-    return () => clearInterval(timer);
-  }, [done]);
-
-  return (
-    <Text style={style} accessibilityRole={accessibilityRole} accessibilityLabel={text}>
-      {text.slice(0, active ? count : 0)}
-      {done ? null : <Text style={{ color: caretOn ? '#FFFFFF' : 'transparent' }}>▍</Text>}
-    </Text>
-  );
-}
-
 export default function HomeScreen() {
   const router = useRouter();
   const rt = useRealtime();
   const [frame, setFrame] = useState({ width: 0, height: 0 });
-  const greeting = `${salutation()} Daniel!`;
+  const greeting = salutation();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const inflightKey = useRef<string | null>(null);
   const lastText = useRef('');
-  const typedIds = useRef(new Set<string>());
-  const typedText = useRef(new Map<string, string>());
-  const [typedTick, setTypedTick] = useState(0);
-  const markTyped = useCallback((id: string) => {
-    if (typedIds.current.has(id)) return;
-    typedIds.current.add(id);
-    setTypedTick(tick => tick + 1);
-  }, []);
   const insets = useSafeAreaInsets();
   const tabBarHeight = (Platform.OS === 'ios' ? 49 : 56) + insets.bottom;
   const { lift, inset } = useKeyboardLift(tabBarHeight);
@@ -241,6 +181,15 @@ export default function HomeScreen() {
   const scrolledTo = useRef<string | null>(null);
   /** The latest question when history arrived; undefined until then. */
   const [openedOn, setOpenedOn] = useState<string | null | undefined>(undefined);
+  const [settled, setSettled] = useState<ReadonlySet<string>>(() => new Set());
+  const markSettled = useCallback((id: string) => {
+    setSettled(current => {
+      if (current.has(id)) return current;
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
+  }, []);
   const reduceMotion = useReducedMotion();
   const focused = useSharedValue(0);
   const fieldStyle = useAnimatedStyle(() => ({
@@ -264,12 +213,7 @@ export default function HomeScreen() {
 
   const messages = rt.assistantMessages;
   const brief = [...messages].reverse().find(message => message.kind === 'brief' && message.role === 'assistant');
-  const intro =
-    brief?.status === 'complete' && brief.body
-      ? brief.body
-      : brief?.status === 'pending'
-        ? 'Looking at today’s prices…'
-        : INTRO;
+  const parsedBrief = brief?.body ? parseBrief(brief.body) : null;
   const chat = messages.filter(message => message.kind === 'chat');
   const thinking = chat.some(message => message.role === 'assistant' && message.status === 'pending');
   const send = useCallback(
@@ -295,6 +239,7 @@ export default function HomeScreen() {
   );
 
   const stocks = rt.market.stocks;
+  const known = new Set(stocks.map(stock => stock.ticker));
   const historyIds = useRef<Set<string> | null>(null);
   if ((rt.status === 'ready' || rt.hasSynced) && historyIds.current === null) {
     historyIds.current = new Set(
@@ -306,41 +251,13 @@ export default function HomeScreen() {
     const last = lastQuestionIndex(chat);
     setOpenedOn(last >= 0 ? chat[last].id : null);
   }
-  const remembered = (id: string) => historyIds.current?.has(id) ?? false;
-  const introIsRemembered = opened && !!(brief && remembered(brief.id));
-  const introParts = paragraphs(intro);
-  const blocks = [
-    { id: 'greeting', text: greeting },
-    ...(opened && !introIsRemembered ? introParts.map((text, index) => ({ id: `intro:${index}`, text })) : []),
-    ...(opened
-      ? chat
-      .filter(message => message.role === 'assistant' && !remembered(message.id))
-      .flatMap(message =>
-        paragraphs(message.body || (message.status === 'pending' ? 'Thinking…' : '')).map((text, index) => ({
-          id: `${message.id}:${index}`,
-          text,
-        }))
-      )
-      : []),
-  ];
-  const blockSignature = blocks.map(block => `${block.id}\u0000${block.text}`).join('\u0001');
-  const [seenSignature, setSeenSignature] = useState(blockSignature);
-  if (seenSignature !== blockSignature) {
-    setSeenSignature(blockSignature);
-    const live = new Set(blocks.map(block => block.id));
-    for (const block of blocks) {
-      const previous = typedText.current.get(block.id);
-      if (previous !== undefined && previous !== block.text) typedIds.current.delete(block.id);
-      typedText.current.set(block.id, block.text);
-    }
-    for (const id of typedIds.current) {
-      if (!live.has(id)) typedIds.current.delete(id);
-    }
-  }
-  void typedTick;
-  const typedThrough = (index: number) => blocks.slice(0, index).every(block => typedIds.current.has(block.id));
-  const introTyped = introIsRemembered || introParts.every((_, index) => typedIds.current.has(`intro:${index}`));
-  const briefTickers = introTyped && brief?.status === 'complete' ? tickersFor(brief.body, brief.citations, stocks) : [];
+  const answered = [...chat].reverse().find(message => message.role === 'assistant' && message.status === 'complete');
+  const answeredUi = answered ? presentation(answered.citations) : { followUps: [], practice: null };
+  const briefChips = parsedBrief?.followUps.length
+    ? parsedBrief.followUps.slice(0, 3)
+    : brief?.status === 'pending' || parsedBrief?.ticker
+      ? []
+      : LEARNING;
 
   function openTicker(ticker: string) {
     router.push({ pathname: '/stock/[ticker]', params: { ticker } });
@@ -386,49 +303,59 @@ export default function HomeScreen() {
         </View>
       );
     }
-    const parts = paragraphs(message.body || (message.status === 'pending' ? 'Thinking…' : ''));
-    const replyReady =
-      remembered(message.id) || parts.every((_, part) => typedIds.current.has(`${message.id}:${part}`));
+    const parts = paragraphs(message.body);
+    const live = opened && historyIds.current != null && !historyIds.current.has(message.id) && !reduceMotion;
+    const settledReply = message.status === 'complete' && (!live || settled.has(message.id));
+    const ui = presentation(message.citations);
+    const mentioned = message.status === 'complete' ? tickersFor(message.citations, known) : [];
+    const names = Object.fromEntries(mentioned.map(ticker => [ticker, stocks.find(item => item.ticker === ticker)?.name || ticker]));
+    const earlier = previousCompany(chat, index, known);
+    const density = snapshotMode({
+      tickers: mentioned,
+      previousTickers: earlier?.tickers ?? null,
+      asOf: quoteAsOf(message.citations, mentioned),
+      previousAsOf: earlier?.asOf ?? null,
+    });
     return (
       <View key={message.id} style={styles.threadItem}>
-        {remembered(message.id) ? (
-          <Text style={styles.replyLine}>{message.body}</Text>
+        {mentioned.length > 0 ? (
+          <AnswerFacts
+            tickers={mentioned}
+            names={names}
+            quotes={rt.market.quotes}
+            closes={rt.market.closes}
+            signals={rt.market.signals}
+            marketOpen={rt.market.generation?.marketOpen ?? null}
+            onOpen={openTicker}
+            density={density}
+          />
+        ) : null}
+        {message.status === 'pending' ? (
+          <ThinkingLine />
+        ) : message.status === 'complete' ? (
+          <RevealedReply
+            id={message.id}
+            text={message.body}
+            animate={live}
+            onDone={markSettled}
+            style={styles.replyLine}
+          />
         ) : (
-          parts.map((text, part) => {
-            const blockIndex = blocks.findIndex(block => block.id === `${message.id}:${part}`);
-            return (
-              <TypedText
-                key={`${message.id}:${part}`}
-                text={text}
-                active={blockIndex >= 0 && typedThrough(blockIndex)}
-                onDone={() => markTyped(`${message.id}:${part}`)}
-                style={styles.replyLine}
-              />
-            );
-          })
+          parts.map((text, index) => (
+            <Text key={`${message.id}:${index}`} style={styles.replyLine}>
+              {text}
+            </Text>
+          ))
         )}
-        {message.status === 'complete' && replyReady
-          ? tickersFor(message.body, message.citations, stocks).map(ticker => {
-              const stock = stocks.find(item => item.ticker === ticker);
-              const quote = rt.market.quotes[ticker];
-              if (!stock) return null;
-              return (
-                <Pressable
-                  key={ticker}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${stock.name || ticker}`}
-                  onPress={() => openTicker(ticker)}>
-                  <StockGraph
-                    title={stock.name || ticker}
-                    plain
-                    price={quote?.price ?? null}
-                    previousClose={quote?.previousClose}
-                    points={chartSeries(rt.market.closes[ticker], quote)}
-                  />
-                </Pressable>
-              );
-            })
-          : null}
+        {settledReply && ui.practice && rt.paperEnabled ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Practice buying 100 dollars of ${ui.practice}`}
+            onPress={() => router.push({ pathname: '/trade', params: { ticker: ui.practice, side: 'buy', amount: '100' } })}
+            style={styles.practice}>
+            <Text style={styles.practiceText}>Practice $100</Text>
+          </Pressable>
+        ) : null}
         {message.status === 'failed' ? (
           <Pressable
             accessibilityRole="button"
@@ -446,6 +373,23 @@ export default function HomeScreen() {
   const latest = lastQuestionIndex(chat);
   /** Only a question asked since Home opened gets a screen of its own; history opens where it left off. */
   const askedNow = opened && latest >= 0 && openedOn !== undefined && chat[latest].id !== openedOn;
+  const answerSettled =
+    !answered || (opened && historyIds.current != null && historyIds.current.has(answered.id)) || settled.has(answered?.id ?? '') || reduceMotion;
+  const followUps =
+    !thinking && answerSettled && answeredUi.followUps.length > 0 ? (
+      <View style={styles.suggestions}>
+        {answeredUi.followUps.map(question => (
+          <Pressable
+            key={question}
+            accessibilityRole="button"
+            disabled={sending || thinking}
+            onPress={() => void send(question)}
+            style={styles.suggestion}>
+            <Text style={styles.suggestionText}>{question}</Text>
+          </Pressable>
+        ))}
+      </View>
+    ) : null;
 
   function onFrame(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
@@ -467,7 +411,7 @@ export default function HomeScreen() {
         <ScrollView
           ref={scrollRef}
           onLayout={event => setViewportHeight(Math.round(event.nativeEvent.layout.height))}
-          contentContainerStyle={[styles.scroll, { paddingBottom: sheetHeight + space.lg + inset }]}
+          contentContainerStyle={[styles.scroll, { paddingBottom: space.sm + inset }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}>
@@ -508,63 +452,42 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <TypedText
-            text={greeting}
-            active={typedThrough(0)}
-            onDone={() => markTyped('greeting')}
-            style={styles.greeting}
-            accessibilityRole="header"
-          />
-          {opened && introIsRemembered ? (
-            <Text style={styles.intro}>{intro}</Text>
-          ) : opened ? (
-            introParts.map((text, index) => (
-              <TypedText
-                key={`intro:${index}`}
-                text={text}
-                active={typedThrough(1 + index)}
-                onDone={() => markTyped(`intro:${index}`)}
-                style={styles.intro}
-              />
-            ))
+          <Text style={styles.greeting} accessibilityRole="header">
+            {greeting}
+          </Text>
+          {parsedBrief || brief?.status === 'pending' ? (
+            <DailyBriefCard
+              brief={parsedBrief}
+              pending={brief?.status === 'pending' && !parsedBrief?.ticker}
+              name={stocks.find(stock => stock.ticker === parsedBrief?.ticker)?.name || parsedBrief?.ticker || ''}
+              quote={parsedBrief?.ticker ? rt.market.quotes[parsedBrief.ticker] : null}
+              closes={parsedBrief?.ticker ? rt.market.closes[parsedBrief.ticker] : undefined}
+              marketOpen={rt.market.generation?.marketOpen ?? null}
+              onOpen={openTicker}
+            />
+          ) : brief?.status === 'complete' && brief.body ? (
+            <Text style={styles.intro}>{brief.body}</Text>
           ) : null}
-          {briefTickers.map(ticker => {
-            const stock = stocks.find(item => item.ticker === ticker);
-            const quote = rt.market.quotes[ticker];
-            if (!stock) return null;
-            return (
-              <Pressable
-                key={ticker}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${stock.name || ticker}`}
-                onPress={() => openTicker(ticker)}>
-                <StockGraph
-                  title={stock.name || ticker}
-                  plain
-                  price={quote?.price ?? null}
-                  previousClose={quote?.previousClose}
-                  points={chartSeries(rt.market.closes[ticker], quote)}
-                />
-              </Pressable>
-            );
-          })}
           {brief?.status === 'failed' ? (
             <Pressable accessibilityRole="button" onPress={() => void requestHomeBrief(clientKey('brief'))}>
-              <Text style={styles.retry}>{brief.body || 'I couldn’t load today’s note. Tap to try again.'}</Text>
+              <Text style={styles.retry}>{brief.body || 'Today’s brief didn’t load. Tap to try again.'}</Text>
             </Pressable>
           ) : null}
-          <View style={styles.suggestions}>
-            {SUGGESTIONS.map(question => (
-              <Pressable
-                key={question}
-                accessibilityRole="button"
-                disabled={sending || thinking}
-                onPress={() => void send(question)}
-                style={styles.suggestion}>
-                <Text style={styles.suggestionText}>{question}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {briefChips.length > 0 ? (
+            <View style={styles.suggestions}>
+              <Text style={styles.askLabel}>Ask Orbit</Text>
+              {briefChips.map(question => (
+                <Pressable
+                  key={question}
+                  accessibilityRole="button"
+                  disabled={sending || thinking}
+                  onPress={() => void send(question)}
+                  style={styles.suggestion}>
+                  <Text style={styles.suggestionText}>{question}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
 
           {(latest >= 0 ? chat.slice(0, latest) : chat).map((message, index) => renderMessage(message, index))}
           {latest >= 0 ? (
@@ -572,18 +495,22 @@ export default function HomeScreen() {
               onLayout={askedNow ? event => onLatestTurn(chat[latest].id, event) : undefined}
               style={[
                 styles.turn,
-                askedNow && viewportHeight > 0
+                askedNow && thinking && viewportHeight > 0
                   ? { minHeight: viewportHeight - sheetHeight - inset - space.lg - space.sm }
                   : null,
               ]}>
               {chat.slice(latest).map((message, offset) => renderMessage(message, latest + offset))}
+              {followUps}
             </View>
-          ) : null}
+          ) : (
+            followUps
+          )}
           {sendError ? (
             <Pressable accessibilityRole="button" onPress={() => void send(lastText.current || draft)}>
               <Text style={styles.retry}>{sendError} Tap to retry.</Text>
             </Pressable>
           ) : null}
+          <View style={{ height: sheetHeight }} />
         </ScrollView>
 
         <Animated.View
@@ -638,8 +565,7 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: space.xl,
     paddingTop: space.sm,
-    paddingBottom: ASK_CLEARANCE,
-    gap: space.lg,
+    gap: space.md,
   },
   header: {
     flexDirection: 'row',
@@ -665,8 +591,10 @@ const styles = StyleSheet.create({
   },
   greeting: { fontFamily: font.bold, fontSize: 22, lineHeight: 28, color: '#FFFFFF' },
   intro: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.text, marginTop: -space.sm },
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  suggestions: { gap: space.sm },
+  askLabel: { fontFamily: font.semibold, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginBottom: space.xs },
   suggestion: {
+    alignSelf: 'flex-start',
     borderRadius: 16,
     backgroundColor: '#1E1F20',
     paddingHorizontal: space.md,
@@ -689,6 +617,18 @@ const styles = StyleSheet.create({
   },
   userLine: { fontFamily: font.regular, fontSize: 16, lineHeight: 22, color: '#FFFFFF' },
   replyLine: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.text },
+  quoteLine: { gap: 2, paddingVertical: space.xs },
+  quoteName: { fontFamily: font.semibold, fontSize: 16, lineHeight: 22, color: '#FFFFFF' },
+  quoteSymbol: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted },
+  quotePrice: { fontFamily: font.semibold, fontSize: 16, lineHeight: 22, color: colors.text },
+  practice: {
+    alignSelf: 'flex-start',
+    borderRadius: 16,
+    backgroundColor: colors.secondary,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  practiceText: { fontFamily: font.semibold, fontSize: 14, lineHeight: 18, color: '#FFFFFF' },
   retry: { fontFamily: font.regular, fontSize: 14, lineHeight: 20, color: '#FFFFFF' },
   notice: {
     fontFamily: font.regular,

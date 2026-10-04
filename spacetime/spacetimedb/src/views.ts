@@ -148,7 +148,8 @@ export const workerJobs = spacetimedb.view(
 );
 
 /** Recent session closes for charts. Prices only; the full bar table stays private. */
-const CHART_SESSIONS = 90;
+/** Enough completed sessions for a 1Y chart when the stored history reaches it. */
+const CHART_SESSIONS = 260;
 
 const marketCloseRow = t.row('MarketClose', {
   id: t.u64().primaryKey(),

@@ -34,6 +34,67 @@ export function chartSeries(
   return undefined;
 }
 
+/** Daily-close ranges the Daily Brief can draw. Intraday 1D is not published. */
+export const BRIEF_RANGES = ['1W', '1M', '3M', '1Y'] as const;
+export type BriefRange = (typeof BRIEF_RANGES)[number];
+
+const BRIEF_SESSIONS: Record<BriefRange, number> = { '1W': 5, '1M': 21, '3M': 63, '1Y': 252 };
+/** Below this, the chip stays hidden instead of pretending the range is complete. */
+const BRIEF_MINIMUM: Record<BriefRange, number> = { '1W': 2, '1M': 10, '3M': 40, '1Y': 180 };
+
+export type DatedClose = { sessionDate: string; close: number };
+
+function etDay(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/**
+ * Real completed closes for one Daily Brief range, oldest first.
+ * A later quote print is included only when its New York date is the last
+ * session or a newer one. Missing history returns null.
+ */
+export function briefSeries(
+  range: BriefRange,
+  closes: ClosePoint[] | undefined,
+  quote?: { price: number; providerTime?: Date } | null,
+): DatedClose[] | null {
+  const history = sortedCloses(closes);
+  if (history.length < BRIEF_MINIMUM[range]) return null;
+  const points: DatedClose[] = history.slice(-BRIEF_SESSIONS[range]).map(point => ({
+    sessionDate: point.sessionDate,
+    close: point.close,
+  }));
+  if (quote && quote.price > 0 && quote.providerTime && points.length > 0) {
+    const day = etDay(quote.providerTime);
+    const last = points[points.length - 1];
+    if (day === last.sessionDate) points[points.length - 1] = { sessionDate: day, close: quote.price };
+    else if (day > last.sessionDate) points.push({ sessionDate: day, close: quote.price });
+  }
+  return points.length >= 2 ? points : null;
+}
+
+export function briefRangeAvailable(
+  range: BriefRange,
+  closes: ClosePoint[] | undefined,
+  quote?: { price: number; providerTime?: Date } | null,
+): boolean {
+  return briefSeries(range, closes, quote) !== null;
+}
+
+/** Change from the first point to the last. Null when the series cannot support it. */
+export function seriesReturn(points: DatedClose[] | null): number | null {
+  if (!points || points.length < 2) return null;
+  const base = points[0].close;
+  const last = points[points.length - 1].close;
+  if (!(base > 0) || !Number.isFinite(last)) return null;
+  return last / base - 1;
+}
+
 export const RANGES = ['1D', '5D', '1M', '6M', 'YTD', '5Y', 'MAX'] as const;
 export type Range = (typeof RANGES)[number];
 
