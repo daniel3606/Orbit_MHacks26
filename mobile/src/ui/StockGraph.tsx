@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useId, useState } from 'react';
-import { PanResponder, StyleSheet, View } from 'react-native';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, FeGaussianBlur, Filter, G, Line } from 'react-native-svg';
 
 import { money, sessionLabel, signedPct } from '@/features/market/format';
@@ -141,6 +141,7 @@ export function StockGraph({
   height,
   baseline: reference,
   onScrubbingChange,
+  onInspect,
 }: {
   title?: string;
   price: number | null;
@@ -163,9 +164,18 @@ export function StockGraph({
   baseline?: number | null;
   /** True while a finger is on the chart. */
   onScrubbingChange?: (active: boolean) => void;
+  /** The chart point under the finger, or null when the finger lifts. */
+  onInspect?: (point: { price: number; date: string | null } | null) => void;
 }) {
   const [width, setWidth] = useState(0);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  const track = useRef<ScrollView>(null);
+  const chartNode = useRef<View>(null);
+  const scrubbing = useRef(false);
+  const lockedScroll = useRef(false);
+  const chartX = useRef(0);
+  const anchorPageX = useRef(0);
+  const anchorOffset = useRef(0);
   const labelId = useId();
   const paired = (points ?? [])
     .map((value, index) => ({ value, date: dates?.[index] ?? null }))
@@ -186,6 +196,13 @@ export function StockGraph({
   const baseline = chart && baselineValue != null ? chart.yOf(baselineValue) : null;
   const cursor = shownIndex != null ? plotted[shownIndex] : null;
   const moment = shownIndex != null ? scrubCaption(paired[shownIndex]?.date ?? null, shownIndex, series.length) : null;
+  const inspectedPrice = shownIndex != null ? series[shownIndex] : null;
+  const inspectedDate = shownIndex != null ? paired[shownIndex]?.date ?? null : null;
+
+  useEffect(() => {
+    if (!onInspect) return;
+    onInspect(inspectedPrice == null ? null : { price: inspectedPrice, date: inspectedDate });
+  }, [onInspect, inspectedPrice, inspectedDate]);
 
   const summary =
     shownPrice == null
@@ -209,28 +226,42 @@ export function StockGraph({
     }
   }, [scrubIndex, series.length]);
 
+  function park() {
+    if (width > 0) track.current?.scrollTo({ x: width, animated: false });
+  }
+
   function choose(x: number) {
     if (plotted.length < 2) return;
-    const index = nearestIndex(plotted, x);
+    const index = nearestIndex(plotted, Math.max(0, Math.min(width, x)));
     setScrubIndex(current => (current === index ? current : index));
   }
 
   function endScrub() {
-    setScrubIndex(null);
-    onScrubbingChange?.(false);
+    const wasScrubbing = scrubbing.current;
+    scrubbing.current = false;
+    if (wasScrubbing) setScrubIndex(null);
+    if (lockedScroll.current) {
+      lockedScroll.current = false;
+      onScrubbingChange?.(false);
+    }
+    park();
   }
 
-  const panHandlers = PanResponder.create({
-    onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dx) > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
-    onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: event => {
+  function beginScrub(pageX: number) {
+    scrubbing.current = true;
+    anchorPageX.current = pageX;
+    anchorOffset.current = width;
+    choose(pageX - chartX.current);
+  }
+
+  function follow(offsetX: number) {
+    if (!scrubbing.current || width <= 0) return;
+    if (!lockedScroll.current) {
+      lockedScroll.current = true;
       onScrubbingChange?.(true);
-      choose(event.nativeEvent.locationX);
-    },
-    onPanResponderMove: event => choose(event.nativeEvent.locationX),
-    onPanResponderRelease: endScrub,
-    onPanResponderTerminate: endScrub,
-  }).panHandlers;
+    }
+    choose(anchorPageX.current - chartX.current - (offsetX - anchorOffset.current));
+  }
 
   const stars = starIndexes(series);
   const starSet = new Set(stars);
@@ -250,8 +281,8 @@ export function StockGraph({
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <View style={[styles.body, compact && styles.bodyCompact]}>
-          {title ? (
+        <View style={[styles.body, compact && styles.bodyCompact, hero && styles.bodyHero]}>
+          {hero ? null : title ? (
             <View style={styles.splitRow} accessibilityRole="text" accessibilityLabel={title ? `${title}. ${summary}` : summary} nativeID={labelId}>
               <T variant="label" style={styles.cardTitle}>
                 {title}
@@ -267,17 +298,17 @@ export function StockGraph({
             </View>
           ) : (
             <View style={styles.quoteBlock} accessibilityRole="text" accessibilityLabel={summary} nativeID={labelId}>
-              <View style={[styles.priceRow, hero && styles.heroRow]}>
+              <View style={styles.priceRow}>
                 <T
                   variant="display"
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.7}
-                  style={[styles.price, hero && styles.heroPrice]}>
+                  style={styles.price}>
                   {shownPrice == null ? '—' : money(shownPrice)}
                 </T>
                 {amount != null && fraction != null ? (
-                  <T variant="label" color={changeColor} style={[styles.change, hero && styles.heroChange]}>
+                  <T variant="label" color={changeColor} style={styles.change}>
                     {plain ? plainChange(amount, fraction) : changeCopy(amount, fraction)}
                   </T>
                 ) : null}
@@ -291,12 +322,15 @@ export function StockGraph({
           )}
 
           <View
+            ref={chartNode}
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
-            {...(scrub ? panHandlers : {})}
             onLayout={event => {
               const next = event.nativeEvent.layout.width;
               setWidth(current => (current === next ? current : next));
+              chartNode.current?.measureInWindow(x => {
+                chartX.current = x;
+              });
             }}>
             {plotted.length >= 2 ? (
               <Svg width={width} height={chartHeight}>
@@ -378,6 +412,35 @@ export function StockGraph({
             ) : (
               <View style={{ height: space.sm }} />
             )}
+            {/* Wider than the chart so a sideways drag stays on this scroller.
+                On iOS that keeps the full-screen back swipe from popping the page. */}
+            {scrub && width > 0 ? (
+              <ScrollView
+                ref={track}
+                horizontal
+                bounces={false}
+                directionalLockEnabled
+                nestedScrollEnabled
+                overScrollMode="never"
+                scrollEventThrottle={16}
+                showsHorizontalScrollIndicator={false}
+                style={styles.scrubber}
+                contentContainerStyle={{ width: width * 3, height: chartHeight }}
+                onLayout={park}
+                onTouchStart={event => {
+                  chartNode.current?.measureInWindow(x => {
+                    chartX.current = x;
+                  });
+                  beginScrub(event.nativeEvent.pageX);
+                }}
+                onScroll={event => follow(event.nativeEvent.contentOffset.x)}
+                onTouchEnd={endScrub}
+                onScrollEndDrag={endScrub}
+                onMomentumScrollEnd={endScrub}
+              >
+                <View style={{ width: width * 3, height: chartHeight }} />
+              </ScrollView>
+            ) : null}
           </View>
         </View>
     </View>
@@ -406,6 +469,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingBottom: space.sm,
   },
+  bodyHero: {
+    paddingTop: space.sm,
+    paddingHorizontal: space.md,
+    paddingBottom: space.xs,
+    gap: 0,
+  },
   splitRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -429,6 +498,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
+  scrubber: { ...StyleSheet.absoluteFill },
   quoteBlock: { gap: 2 },
   priceRow: {
     flexDirection: 'row',
@@ -445,24 +515,5 @@ const styles = StyleSheet.create({
     fontFamily: font.semibold,
     fontSize: 15,
     lineHeight: 20,
-  },
-  /** Price and change share one line. The price shrinks before the change wraps. */
-  heroRow: {
-    flexWrap: 'nowrap',
-    gap: space.sm,
-  },
-  heroPrice: {
-    flexShrink: 1,
-    fontFamily: font.semibold,
-    fontSize: 26,
-    lineHeight: 32,
-    letterSpacing: 0.3,
-    fontVariant: ['tabular-nums'],
-  },
-  heroChange: {
-    flexShrink: 0,
-    fontSize: 16,
-    lineHeight: 22,
-    fontVariant: ['tabular-nums'],
   },
 });
