@@ -8,7 +8,7 @@
     "scheme": "orbit",
     "userInterfaceStyle": "dark",
     "ios": {
-      "bundleIdentifier": "dev.orbit.mobile",
+      "bundleIdentifier": "com.dllim.orbitmhacks26",
       "buildNumber": "1",
       "supportsTablet": false,
       "config": {
@@ -40,6 +40,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7ab07791-5ee6-4ad4-a729-a797e28fd7d3"
+      }
+    },
+    "owner": "dllim"
   }
 }

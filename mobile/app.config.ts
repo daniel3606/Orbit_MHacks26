@@ -18,5 +18,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: config.name ?? 'Orbit',
     slug: config.slug ?? 'orbit',
+    ios: {
+      ...config.ios,
+      bundleIdentifier: 'com.dllim.orbitmhacks26',
+    },
   };
 };
