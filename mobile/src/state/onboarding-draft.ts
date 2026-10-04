@@ -12,10 +12,13 @@ import {
   ZODIAC_SIGNS,
   type Option,
 } from '@/features/onboarding/options';
+import { daysInMonth, signForBirthday } from '@/features/onboarding/zodiac';
 
 /**
  * Local, unsaved answers. Discarded after a successful save; the saved
  * profile only ever comes back through the SpacetimeDB subscription.
+ * `birthMonth`/`birthDay` never leave the device: only the sign derived
+ * from them is saved.
  */
 export type Draft = {
   riskTolerance: string | null;
@@ -25,6 +28,8 @@ export type Draft = {
   experienceLevel: string | null;
   primaryGoal: string | null;
   zodiacSign: string | null;
+  birthMonth: number | null;
+  birthDay: number | null;
 };
 
 const EMPTY: Draft = {
@@ -35,6 +40,8 @@ const EMPTY: Draft = {
   experienceLevel: null,
   primaryGoal: null,
   zodiacSign: null,
+  birthMonth: null,
+  birthDay: null,
 };
 
 type DraftStore = {
@@ -42,6 +49,8 @@ type DraftStore = {
   step: number;
   set: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
   toggleSector: (value: string) => void;
+  /** Sets either part of the birthday; the sign follows once both are known. */
+  setBirthday: (part: { month?: number; day?: number }) => void;
   setStep: (step: number) => void;
   replace: (draft: Draft) => void;
   reset: () => void;
@@ -60,6 +69,19 @@ export const useDraft = create<DraftStore>(set => ({
         : [...s.draft.sectorInterests, value];
       return { draft: { ...s.draft, sectorInterests } };
     }),
+  setBirthday: part =>
+    set(s => {
+      const birthMonth = part.month ?? s.draft.birthMonth;
+      const day = part.day ?? s.draft.birthDay;
+      // Switching to a shorter month drops a day it doesn't have (e.g. 31 → April).
+      const birthDay = birthMonth !== null && day !== null && day > daysInMonth(birthMonth) ? null : day;
+      const complete = birthMonth !== null && birthDay !== null;
+      const wasComplete = s.draft.birthMonth !== null && s.draft.birthDay !== null;
+      // A sign worked out from an earlier birthday no longer holds once the birthday is incomplete;
+      // a sign loaded from the saved profile stays until a full birthday replaces it.
+      const zodiacSign = complete ? signForBirthday(birthMonth, birthDay) : wasComplete ? null : s.draft.zodiacSign;
+      return { draft: { ...s.draft, birthMonth, birthDay, zodiacSign } };
+    }),
   setStep: step => set({ step }),
   replace: draft => set({ step: 0, draft }),
   reset: () => set({ draft: EMPTY, step: 0 }),
@@ -75,10 +97,12 @@ export function draftFromProfile(profile: ProfileVM, zodiacSign: string | null):
     experienceLevel: profile.experienceLevel,
     primaryGoal: profile.primaryGoal,
     zodiacSign,
+    birthMonth: null,
+    birthDay: null,
   };
 }
 
-export type ValidDraft = Omit<Draft, 'zodiacSign' | 'riskTolerance' | 'investmentHorizon' | 'investmentStyle' | 'experienceLevel' | 'primaryGoal'> & {
+export type ValidDraft = Omit<Draft, 'birthMonth' | 'birthDay' | 'zodiacSign' | 'riskTolerance' | 'investmentHorizon' | 'investmentStyle' | 'experienceLevel' | 'primaryGoal'> & {
   riskTolerance: string;
   investmentHorizon: string;
   investmentStyle: string;

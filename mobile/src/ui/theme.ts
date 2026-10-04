@@ -35,6 +35,14 @@ export const colors = {
   selection: '#2A1438',
   /** Selected chart range. */
   rangeActive: '#2F0C48',
+  /** Text inputs and dropdowns on the onboarding screens. */
+  field: 'rgba(0, 0, 0, 0.2)',
+  fieldBorder: '#E3E3E3',
+  /** "Sign in with Google" / "Sign in with Apple" buttons. */
+  socialLight: '#FFFFFF',
+  socialLightBorder: '#D4D4D4',
+  socialLightText: '#404040',
+  socialDark: '#000000',
 } as const;
 
 /** Top, middle, end. Applied as a vertical fill behind every screen. */
