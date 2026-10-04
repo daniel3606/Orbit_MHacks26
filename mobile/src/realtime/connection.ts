@@ -173,6 +173,28 @@ export type RecommendationGenerationVM = {
   publishedAt: Date;
 };
 
+export type DiscoveryVM = {
+  id: string;
+  /** The person's local calendar day this set belongs to (YYYY-MM-DD). */
+  discoveryDate: string;
+  zodiacSign: string | null;
+  sectorId: string;
+  sectorName: string;
+  subthemeId: string;
+  title: string;
+  description: string;
+  createdAt: Date;
+};
+export type DiscoveryItemVM = {
+  ticker: string;
+  rank: number;
+  angle: string;
+  about: string;
+  reasons: string[];
+  newsCount: number;
+  news: { headline: string; source: string; url: string; publishedAt: Date } | null;
+};
+
 export type PaperAccountVM = {
   cashMicros: string;
   equityMicros: string;
@@ -263,6 +285,8 @@ export type RealtimeSnapshot = {
   jobs: JobVM[];
   recommendations: RecommendationVM[];
   recommendationGeneration: RecommendationGenerationVM | null;
+  discovery: DiscoveryVM | null;
+  discoveryItems: DiscoveryItemVM[];
   paperEnabled: boolean;
   paperAccount: PaperAccountVM | null;
   paperPositions: PaperPositionVM[];
@@ -290,6 +314,8 @@ function initialSnapshot(): RealtimeSnapshot {
     jobs: [],
     recommendations: [],
     recommendationGeneration: null,
+    discovery: null,
+    discoveryItems: [],
     paperEnabled: false,
     paperAccount: null,
     paperPositions: [],
@@ -482,6 +508,8 @@ class ConnectionManager {
         tables.myPaperPositions,
         tables.myPaperOrders,
         tables.myAssistantMessages,
+        tables.myDailyDiscovery,
+        tables.myDiscoveryItems,
       ]);
   }
 
@@ -502,6 +530,8 @@ class ConnectionManager {
       conn.db.myPaperPositions,
       conn.db.myPaperOrders,
       conn.db.myAssistantMessages,
+      conn.db.myDailyDiscovery,
+      conn.db.myDiscoveryItems,
       conn.db.stock,
       conn.db.marketQuote,
       conn.db.trendSignal,
@@ -639,6 +669,42 @@ class ConnectionManager {
             publishedAt: toDate(generation.publishedAt),
           };
         })(),
+        discovery: (() => {
+          const row = [...conn.db.myDailyDiscovery.iter()][0];
+          if (!row) return null;
+          return {
+            id: row.id.toString(),
+            discoveryDate: row.discoveryDate,
+            zodiacSign: row.zodiacSign ?? null,
+            sectorId: row.sectorId,
+            sectorName: row.sectorName,
+            subthemeId: row.subthemeId,
+            title: row.title,
+            description: row.description,
+            createdAt: toDate(row.createdAt),
+          };
+        })(),
+        discoveryItems: [...conn.db.myDiscoveryItems.iter()]
+          .map(
+            (row): DiscoveryItemVM => ({
+              ticker: row.ticker,
+              rank: row.rank,
+              angle: row.angle,
+              about: row.about,
+              reasons: [...row.reasons],
+              newsCount: row.newsCount,
+              news:
+                row.newsHeadline && row.newsUrl && row.newsPublishedAt
+                  ? {
+                      headline: row.newsHeadline,
+                      source: row.newsSource ?? '',
+                      url: row.newsUrl,
+                      publishedAt: toDate(row.newsPublishedAt),
+                    }
+                  : null,
+            })
+          )
+          .sort((a, b) => a.rank - b.rank),
         paperEnabled: [...conn.db.myPaperAccess.iter()].length > 0,
         paperAccount: (() => {
           const row = [...conn.db.myPaperAccount.iter()][0];
@@ -905,6 +971,8 @@ class ConnectionManager {
       jobs: [],
       recommendations: [],
       recommendationGeneration: null,
+      discovery: null,
+      discoveryItems: [],
       paperEnabled: false,
       paperAccount: null,
       paperPositions: [],

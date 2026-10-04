@@ -24,6 +24,8 @@ class EquityEntry(_M):
     ticker: str = Field(pattern=TICKER)
     sector: str
     benchmark: str = Field(pattern=TICKER)
+    # Shown until the provider profile is stored; the profile name wins once fetched.
+    name: str = Field(default="", max_length=120)
 
 
 class Universe(_M):
@@ -31,7 +33,7 @@ class Universe(_M):
     notes: str = ""
     fallback_benchmark: str
     benchmarks: list[BenchmarkEntry]
-    equities: list[EquityEntry] = Field(min_length=1, max_length=40)
+    equities: list[EquityEntry] = Field(min_length=1, max_length=150)
 
     @model_validator(mode="after")
     def references(self) -> "Universe":

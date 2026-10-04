@@ -18,7 +18,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LocalSvg } from 'react-native-svg/css';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { formatShares, money, signedPct, stamp } from '@/features/market/format';
@@ -27,6 +26,7 @@ import { realtime, type PaperOrderVM } from '@/realtime/connection';
 import { AppError, messageFor } from '@/realtime/errors';
 import { useRealtime } from '@/realtime/hooks';
 import { Odometer, RollingText } from '@/ui/RollingNumber';
+import { StarField } from '@/ui/StarField';
 import { backgroundGradient, colors, font, HIT, space } from '@/ui/theme';
 
 import {
@@ -45,20 +45,6 @@ const closeIcon = require('../../../assets/icon/close.svg');
 const backspaceIcon = require('../../../assets/icon/backspace.svg');
 const swipeIcon = require('../../../assets/icon/swipe-up.svg');
 
-/** Star field from the design, laid out on a 430pt-wide frame. `x`/`y` are each star's centre. */
-const STARS = [
-  { asset: require('../../../assets/images/stars/star-3.svg'), size: 48.7971, x: 81.5, y: 115.5 },
-  { asset: require('../../../assets/images/stars/star-5.svg'), size: 50.7971, x: 47.5, y: 103.5 },
-  { asset: require('../../../assets/images/stars/star-3.svg'), size: 48.7971, x: 159.5, y: 113.5 },
-  { asset: require('../../../assets/images/stars/star-2.svg'), size: 47.7971, x: 26, y: 201 },
-  { asset: require('../../../assets/images/stars/star-3.svg'), size: 48.7971, x: 247.5, y: 88.5 },
-  { asset: require('../../../assets/images/stars/star-5.svg'), size: 50.7971, x: 336.5, y: 63.5 },
-  { asset: require('../../../assets/images/stars/star-3.svg'), size: 48.7971, x: 309.5, y: 121.5 },
-  { asset: require('../../../assets/images/stars/star-8.svg'), size: 53.7971, x: 143, y: 60 },
-  { asset: require('../../../assets/images/stars/star-3.svg'), size: 48.7971, x: 390.5, y: 234.5 },
-  { asset: require('../../../assets/images/stars/star-3.svg'), size: 48.7971, x: 397.5, y: 157.5 },
-] as const;
-const DESIGN_WIDTH = 430;
 
 /** Room under the card for the swipe prompt, above the home indicator. */
 const PROMPT_HEIGHT = 92;
@@ -370,21 +356,7 @@ export default function TradeTicket() {
     <GestureHandlerRootView style={styles.root}>
       <LinearGradient colors={backgroundGradient} locations={[0, 0.5, 1] as const} style={StyleSheet.absoluteFill} />
 
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {STARS.map((star, index) => (
-          <View
-            key={index}
-            style={{
-              position: 'absolute',
-              left: (star.x / DESIGN_WIDTH) * width - star.size / 2,
-              top: star.y - star.size / 2,
-              width: star.size,
-              height: star.size,
-            }}>
-            <LocalSvg asset={star.asset} width={star.size} height={star.size} />
-          </View>
-        ))}
-      </View>
+      <StarField width={width} />
 
       {phase !== 'edit' ? (
         <Animated.View style={[styles.confirm, { paddingTop: insets.top + 96, paddingBottom: insets.bottom + space.lg }, confirmStyle]}>

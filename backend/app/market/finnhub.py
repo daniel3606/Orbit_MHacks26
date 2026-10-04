@@ -282,6 +282,11 @@ class FinnhubProvider:
 
     async def company_news(self, ticker: str, start: date, end: date) -> list[dict[str, str]]:
         """Recent headlines. Missing access or a bad payload is an empty list, not invented news."""
+        return await self.news_items(ticker, start, end) or []
+
+    async def news_items(self, ticker: str, start: date, end: date, limit: int = 3) -> list[dict[str, str]] | None:
+        """Up to `limit` recent headlines, newest first as returned. None when the call failed,
+        so callers can tell "no stories" apart from "could not check"."""
         try:
             body = await self._get(
                 "/company-news",
@@ -289,9 +294,9 @@ class FinnhubProvider:
                 600,
             )
         except (ProviderAccessDenied, ProviderUnavailable, ProviderContractError, ProviderRateLimited):
-            return []
+            return None
         if not isinstance(body, list):
-            return []
+            return None
         items: list[dict[str, str]] = []
         for row in body:
             if not isinstance(row, dict):
@@ -312,7 +317,7 @@ class FinnhubProvider:
                     "ticker": ticker,
                 }
             )
-            if len(items) >= 3:
+            if len(items) >= limit:
                 break
         return items
 

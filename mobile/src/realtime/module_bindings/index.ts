@@ -45,12 +45,14 @@ import EnqueueAssistantMessageReducer from "./enqueue_assistant_message_reducer"
 import FailJobReducer from "./fail_job_reducer";
 import GrantServiceIdentityReducer from "./grant_service_identity_reducer";
 import PublishAssistantReplyReducer from "./publish_assistant_reply_reducer";
+import PublishDailyDiscoveryReducer from "./publish_daily_discovery_reducer";
 import PublishMarketSnapshotReducer from "./publish_market_snapshot_reducer";
 import PublishProviderCapabilitiesReducer from "./publish_provider_capabilities_reducer";
 import PublishRecommendationsReducer from "./publish_recommendations_reducer";
 import RebindPaperDemoReducer from "./rebind_paper_demo_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RequestBackendCheckReducer from "./request_backend_check_reducer";
+import RequestDailyDiscoveryReducer from "./request_daily_discovery_reducer";
 import RequestHomeBriefReducer from "./request_home_brief_reducer";
 import RequestMarketIngestReducer from "./request_market_ingest_reducer";
 import RequestPaperReconcileReducer from "./request_paper_reconcile_reducer";
@@ -70,6 +72,8 @@ import MarketQuoteRow from "./market_quote_table";
 import MyAccountRow from "./my_account_table";
 import MyAssistantMessagesRow from "./my_assistant_messages_table";
 import MyBrandingRow from "./my_branding_table";
+import MyDailyDiscoveryRow from "./my_daily_discovery_table";
+import MyDiscoveryItemsRow from "./my_discovery_items_table";
 import MyJobsRow from "./my_jobs_table";
 import MyPaperAccessRow from "./my_paper_access_table";
 import MyPaperAccountRow from "./my_paper_account_table";
@@ -86,6 +90,8 @@ import WorkerAssistantMessagesRow from "./worker_assistant_messages_table";
 import WorkerAssistantPositionsRow from "./worker_assistant_positions_table";
 import WorkerAssistantRecommendationsRow from "./worker_assistant_recommendations_table";
 import WorkerDailyBarsRow from "./worker_daily_bars_table";
+import WorkerDiscoveryHistoryRow from "./worker_discovery_history_table";
+import WorkerDiscoveryItemsRow from "./worker_discovery_items_table";
 import WorkerJobProfilesRow from "./worker_job_profiles_table";
 import WorkerJobsRow from "./worker_jobs_table";
 import WorkerPaperAccountRow from "./worker_paper_account_table";
@@ -181,6 +187,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyBrandingRow),
+  myDailyDiscovery: __table({
+    name: 'my_daily_discovery',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyDailyDiscoveryRow),
+  myDiscoveryItems: __table({
+    name: 'my_discovery_items',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyDiscoveryItemsRow),
   myJobs: __table({
     name: 'my_jobs',
     indexes: [
@@ -272,6 +292,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, WorkerDailyBarsRow),
+  workerDiscoveryHistory: __table({
+    name: 'worker_discovery_history',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerDiscoveryHistoryRow),
+  workerDiscoveryItems: __table({
+    name: 'worker_discovery_items',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerDiscoveryItemsRow),
   workerJobProfiles: __table({
     name: 'worker_job_profiles',
     indexes: [
@@ -315,12 +349,14 @@ const reducersSchema = __reducers(
   __reducerSchema("fail_job", FailJobReducer),
   __reducerSchema("grant_service_identity", GrantServiceIdentityReducer),
   __reducerSchema("publish_assistant_reply", PublishAssistantReplyReducer),
+  __reducerSchema("publish_daily_discovery", PublishDailyDiscoveryReducer),
   __reducerSchema("publish_market_snapshot", PublishMarketSnapshotReducer),
   __reducerSchema("publish_provider_capabilities", PublishProviderCapabilitiesReducer),
   __reducerSchema("publish_recommendations", PublishRecommendationsReducer),
   __reducerSchema("rebind_paper_demo", RebindPaperDemoReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("request_backend_check", RequestBackendCheckReducer),
+  __reducerSchema("request_daily_discovery", RequestDailyDiscoveryReducer),
   __reducerSchema("request_home_brief", RequestHomeBriefReducer),
   __reducerSchema("request_market_ingest", RequestMarketIngestReducer),
   __reducerSchema("request_paper_reconcile", RequestPaperReconcileReducer),

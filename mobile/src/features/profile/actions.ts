@@ -16,6 +16,11 @@ export function requestRecommendations() {
   return realtime.call(conn => conn.reducers.requestRecommendations({}));
 }
 
+/** Asks for today's Discovery set. `localDate` is the device's calendar day; the owner is the connection. */
+export function requestDailyDiscovery(localDate: string) {
+  return realtime.call(conn => conn.reducers.requestDailyDiscovery({ localDate }));
+}
+
 export function requestPaperSync() {
   return realtime.call(conn => conn.reducers.requestPaperSync({}));
 }

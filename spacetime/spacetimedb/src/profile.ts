@@ -2,6 +2,7 @@ import { SenderError, t } from 'spacetimedb/server';
 import spacetimedb from './schema';
 import { requireConsumer, type Ctx } from './auth';
 import { enqueueRecommendationRefresh } from './jobs';
+import { repointQueuedDiscovery } from './discovery';
 import { PROFILE_SCHEMA_VERSION } from './preferences';
 import { validatePreferences, validateZodiac, type PreferenceInput } from './validation';
 
@@ -23,6 +24,7 @@ function saveBranding(ctx: Ctx, zodiacSign: string | undefined) {
   const row = { owner: ctx.sender, zodiacSign: sign, updatedAt: ctx.timestamp };
   if (existing) ctx.db.profileBranding.owner.update(row);
   else ctx.db.profileBranding.insert(row);
+  repointQueuedDiscovery(ctx, ctx.sender, sign);
 }
 
 function split(args: PreferenceArgs): [PreferenceInput, string | undefined] {

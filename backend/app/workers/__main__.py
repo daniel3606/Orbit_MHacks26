@@ -8,6 +8,7 @@ import sys
 from app.assistant.handle import handlers as assistant_handlers
 from app.config.settings import get_settings
 from app.config.universe import load_universe
+from app.discovery.handler import DailyDiscoveryHandler
 from app.market.alpaca import AlpacaHistoricalProvider
 from app.market.finnhub import FinnhubProvider
 from app.market.ingest import IngestMarketHandler
@@ -51,12 +52,21 @@ async def main() -> int:
         provider: RoutedMarketProvider | None = None
         news_provider: FinnhubProvider | None = None
         if settings.market_ingest_enabled and settings.finnhub_api_key is not None:
+            interactive = settings.finnhub_interactive_calls_per_minute
             quotes = FinnhubProvider(
                 settings.finnhub_api_key,
                 base_url=str(settings.finnhub_base_url).rstrip("/"),
-                calls_per_minute=settings.finnhub_calls_per_minute,
+                calls_per_minute=settings.finnhub_calls_per_minute - interactive,
                 burst=settings.finnhub_burst,
                 max_retries=settings.finnhub_max_retries,
+            )
+            # Same key, separate budget: news for people never waits behind ingestion's quotes.
+            news_provider = FinnhubProvider(
+                settings.finnhub_api_key,
+                base_url=str(settings.finnhub_base_url).rstrip("/"),
+                calls_per_minute=interactive,
+                burst=min(settings.finnhub_burst, interactive),
+                max_retries=1,
             )
             history = None
             if settings.alpaca_api_key_id is not None and settings.alpaca_api_secret_key is not None:
@@ -69,7 +79,6 @@ async def main() -> int:
                 )
             else:
                 log.warning("No Alpaca market-data keys; daily history stays on Finnhub capabilities")
-            news_provider = quotes
             provider = RoutedMarketProvider(quotes, history)
             ingest = IngestMarketHandler(provider, load_universe(), SignalConfig())
             handlers[ingest.kind] = ingest
@@ -109,6 +118,9 @@ async def main() -> int:
         else:
             log.warning("Paper trading not registered (PAPER_DEMO_IDENTITY or Alpaca keys missing)")
 
+        # Discovery always runs; without a news provider the news component is left out.
+        handlers[DailyDiscoveryHandler.kind] = DailyDiscoveryHandler(news_provider)
+
         handlers.update(
             assistant_handlers(
                 api_key=settings.openai_api_key,
@@ -144,6 +156,8 @@ async def main() -> int:
         finally:
             if provider is not None:
                 await provider.aclose()
+            if news_provider is not None:
+                await news_provider.aclose()
             if paper is not None:
                 await paper.aclose()
         log.info("worker stopped")

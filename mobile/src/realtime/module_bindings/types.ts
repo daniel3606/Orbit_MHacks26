@@ -61,6 +61,70 @@ export const DailyBar = __t.object("DailyBar", {
 });
 export type DailyBar = __Infer<typeof DailyBar>;
 
+export const DailyDiscovery = __t.object("DailyDiscovery", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  discoveryDate: __t.string(),
+  zodiacSign: __t.option(__t.string()),
+  sectorId: __t.string(),
+  sectorName: __t.string(),
+  subthemeId: __t.string(),
+  title: __t.string(),
+  description: __t.string(),
+  algorithmVersion: __t.string(),
+  themeVersion: __t.string(),
+  marketGeneration: __t.u64(),
+  consideredCount: __t.u16(),
+  eligibleCount: __t.u16(),
+  jobId: __t.u64(),
+  createdAt: __t.timestamp(),
+});
+export type DailyDiscovery = __Infer<typeof DailyDiscovery>;
+
+export const DailyDiscoveryItem = __t.object("DailyDiscoveryItem", {
+  id: __t.u64(),
+  discoveryId: __t.u64(),
+  owner: __t.identity(),
+  discoveryDate: __t.string(),
+  ticker: __t.string(),
+  rank: __t.u16(),
+  score: __t.f64(),
+  trendScore: __t.option(__t.f64()),
+  fitScore: __t.option(__t.f64()),
+  newsScore: __t.option(__t.f64()),
+  momentumScore: __t.option(__t.f64()),
+  noveltyScore: __t.f64(),
+  angle: __t.string(),
+  about: __t.string(),
+  reasons: __t.array(__t.string()),
+  newsCount: __t.u16(),
+  newsHeadline: __t.option(__t.string()),
+  newsSource: __t.option(__t.string()),
+  newsUrl: __t.option(__t.string()),
+  newsPublishedAt: __t.option(__t.timestamp()),
+});
+export type DailyDiscoveryItem = __Infer<typeof DailyDiscoveryItem>;
+
+export const DiscoveryItemInput = __t.object("DiscoveryItemInput", {
+  ticker: __t.string(),
+  rank: __t.u16(),
+  score: __t.f64(),
+  trendScore: __t.option(__t.f64()),
+  fitScore: __t.option(__t.f64()),
+  newsScore: __t.option(__t.f64()),
+  momentumScore: __t.option(__t.f64()),
+  noveltyScore: __t.f64(),
+  angle: __t.string(),
+  about: __t.string(),
+  reasons: __t.array(__t.string()),
+  newsCount: __t.u16(),
+  newsHeadline: __t.option(__t.string()),
+  newsSource: __t.option(__t.string()),
+  newsUrl: __t.option(__t.string()),
+  newsPublishedAt: __t.option(__t.timestamp()),
+});
+export type DiscoveryItemInput = __Infer<typeof DiscoveryItemInput>;
+
 export const FitComponent = __t.object("FitComponent", {
   name: __t.string(),
   available: __t.bool(),
@@ -169,6 +233,12 @@ export type MyAssistantMessages = __Infer<typeof MyAssistantMessages>;
 
 export const MyBranding = __t.object("MyBranding", {});
 export type MyBranding = __Infer<typeof MyBranding>;
+
+export const MyDailyDiscovery = __t.object("MyDailyDiscovery", {});
+export type MyDailyDiscovery = __Infer<typeof MyDailyDiscovery>;
+
+export const MyDiscoveryItems = __t.object("MyDiscoveryItems", {});
+export type MyDiscoveryItems = __Infer<typeof MyDiscoveryItems>;
 
 export const MyJobs = __t.object("MyJobs", {});
 export type MyJobs = __Infer<typeof MyJobs>;
@@ -517,6 +587,12 @@ export type WorkerAssistantRecommendations = __Infer<typeof WorkerAssistantRecom
 
 export const WorkerDailyBars = __t.object("WorkerDailyBars", {});
 export type WorkerDailyBars = __Infer<typeof WorkerDailyBars>;
+
+export const WorkerDiscoveryHistory = __t.object("WorkerDiscoveryHistory", {});
+export type WorkerDiscoveryHistory = __Infer<typeof WorkerDiscoveryHistory>;
+
+export const WorkerDiscoveryItems = __t.object("WorkerDiscoveryItems", {});
+export type WorkerDiscoveryItems = __Infer<typeof WorkerDiscoveryItems>;
 
 export const WorkerJobProfiles = __t.object("WorkerJobProfiles", {});
 export type WorkerJobProfiles = __Infer<typeof WorkerJobProfiles>;

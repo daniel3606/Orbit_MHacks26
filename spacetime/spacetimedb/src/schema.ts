@@ -61,8 +61,9 @@ export const investmentProfile = table(
 );
 
 /**
- * Presentation-only personalization. Kept in a separate table so ranking
- * inputs (`investment_profile`, `worker_job_profiles`) can never include it.
+ * Zodiac sign. Kept in a separate table so ranking inputs (`investment_profile`,
+ * `worker_job_profiles`) can never include it. Discovery copies it into its job
+ * payload only to choose the day's theme; it is never a scoring input.
  */
 export const profileBranding = table(
   { name: 'profile_branding' },
@@ -357,6 +358,67 @@ export const recommendation = table(
   }
 );
 
+/**
+ * One Discovery set per person per local calendar day. The reducer enforces
+ * uniqueness on (owner, discoveryDate); a set never changes once published, so
+ * reopening the tab the same day shows the same companies. Prices are not
+ * stored here: cards read the live `market_quote` rows.
+ */
+export const dailyDiscovery = table(
+  {
+    name: 'daily_discovery',
+    indexes: [{ accessor: 'by_owner_date', algorithm: 'btree', columns: ['owner', 'discoveryDate'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity().index('btree'),
+    discoveryDate: t.string(), // the person's local YYYY-MM-DD
+    zodiacSign: t.option(t.string()), // navigation only; never a scoring input
+    sectorId: t.string(),
+    sectorName: t.string(),
+    subthemeId: t.string(),
+    title: t.string(),
+    description: t.string(),
+    algorithmVersion: t.string(),
+    themeVersion: t.string(),
+    marketGeneration: t.u64(),
+    consideredCount: t.u16(),
+    eligibleCount: t.u16(),
+    jobId: t.u64(),
+    createdAt: t.timestamp(),
+  }
+);
+
+/** Companies in one Discovery set. Recent rows double as the person's discovery history. */
+export const dailyDiscoveryItem = table(
+  {
+    name: 'daily_discovery_item',
+    indexes: [{ accessor: 'by_discovery', algorithm: 'btree', columns: ['discoveryId'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    discoveryId: t.u64(),
+    owner: t.identity().index('btree'),
+    discoveryDate: t.string(),
+    ticker: t.string(),
+    rank: t.u16(),
+    score: t.f64(),
+    trendScore: t.option(t.f64()),
+    fitScore: t.option(t.f64()),
+    newsScore: t.option(t.f64()),
+    momentumScore: t.option(t.f64()),
+    noveltyScore: t.f64(),
+    angle: t.string(),
+    about: t.string(),
+    reasons: t.array(t.string()),
+    newsCount: t.u16(),
+    newsHeadline: t.option(t.string()),
+    newsSource: t.option(t.string()),
+    newsUrl: t.option(t.string()),
+    newsPublishedAt: t.option(t.timestamp()),
+  }
+);
+
 /** One explicit paper-account binding. Not created on connect. */
 export const paperBinding = table(
   { name: 'paper_binding' },
@@ -486,6 +548,8 @@ const spacetimedb = schema({
   providerCapability,
   recommendationGeneration,
   recommendation,
+  dailyDiscovery,
+  dailyDiscoveryItem,
   paperBinding,
   paperAccount,
   paperPosition,

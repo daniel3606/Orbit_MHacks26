@@ -168,6 +168,7 @@ export default function StockDetailScreen() {
   const signal = rt.market.signals[symbol];
   const closes = rt.market.closes[symbol];
   const match = rt.recommendations.find(row => row.ticker === symbol);
+  const discovered = rt.discoveryItems.find(row => row.ticker === symbol);
   const position = rt.paperPositions.find(row => row.ticker === symbol);
   const orders = rt.paperOrders.filter(row => row.ticker === symbol).slice(0, 3);
 
@@ -247,6 +248,11 @@ export default function StockDetailScreen() {
                 <Point label="Recent activity">{match.marketActivity}</Point>
                 <Point label="Risk">{match.riskObservation}</Point>
                 {match.learningNote ? <Text style={styles.note}>{match.learningNote}</Text> : null}
+              </>
+            ) : discovered && rt.discovery ? (
+              <>
+                <Point label="Why it found you">{discovered.reasons.join('. ')}.</Point>
+                <Point label={`In ${rt.discovery.title}`}>{discovered.about}</Point>
               </>
             ) : (
               <Text style={styles.point}>

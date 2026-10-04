@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     finnhub_base_url: AnyHttpUrl = AnyHttpUrl("https://finnhub.io/api/v1")
     finnhub_calls_per_minute: int = Field(default=50, ge=1, le=900)
     finnhub_burst: int = Field(default=20, ge=1, le=30)  # stays under the documented 30 calls/s cap
+    # Part of finnhub_calls_per_minute kept for person-facing calls (news for Discovery, briefs, chat)
+    # so they never queue behind a market ingestion run. Ingestion gets the rest.
+    finnhub_interactive_calls_per_minute: int = Field(default=10, ge=1, le=100)
     finnhub_max_retries: int = Field(default=3, ge=0, le=6)
     market_ingest_enabled: bool = True
 
@@ -96,6 +99,12 @@ class Settings(BaseSettings):
         if len(hex_value) != 64 or any(c not in "0123456789abcdef" for c in hex_value):
             raise ValueError("PAPER_DEMO_IDENTITY must be 64 hex characters")
         return hex_value
+
+    @model_validator(mode="after")
+    def finnhub_budget(self) -> "Settings":
+        if self.finnhub_interactive_calls_per_minute >= self.finnhub_calls_per_minute:
+            raise ValueError("FINNHUB_INTERACTIVE_CALLS_PER_MINUTE must leave room for ingestion")
+        return self
 
     @model_validator(mode="after")
     def alpaca_pair(self) -> "Settings":

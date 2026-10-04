@@ -191,3 +191,45 @@ class PaperOrderV1(_Dto):
     revision: int
     created_at: datetime
     updated_at: datetime
+
+
+class DailyDiscoveryV1(_Dto):
+    id: int
+    owner: IdentityHex
+    discovery_date: str
+    zodiac_sign: str | None
+    sector_id: str
+    sector_name: str
+    subtheme_id: str
+    title: str
+    description: str
+    algorithm_version: str
+    theme_version: str
+    market_generation: int
+    considered_count: int
+    eligible_count: int
+    job_id: int
+    created_at: datetime
+
+
+class DailyDiscoveryItemV1(_Dto):
+    id: int
+    discovery_id: int
+    owner: IdentityHex
+    discovery_date: str
+    ticker: str
+    rank: int
+    score: float
+    trend_score: float | None
+    fit_score: float | None
+    news_score: float | None
+    momentum_score: float | None
+    novelty_score: float
+    angle: str
+    about: str
+    reasons: list[str]
+    news_count: int
+    news_headline: str | None
+    news_source: str | None
+    news_url: str | None
+    news_published_at: datetime | None

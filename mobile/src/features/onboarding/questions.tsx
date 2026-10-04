@@ -45,7 +45,7 @@ export const QUESTIONS: Question[] = [
   {
     key: 'zodiacSign',
     title: 'Choose your sign (optional)',
-    help: 'Just for the look of your Orbit. It never affects which stocks you see or how they are scored.',
+    help: 'Picks which part of the market Discover explores each day. It never affects how companies are scored.',
     options: ZODIAC_SIGNS,
     optional: true,
   },
