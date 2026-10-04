@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   socialLight: { backgroundColor: colors.socialLight, borderWidth: 1, borderColor: colors.socialLightBorder },
-  socialDark: { backgroundColor: colors.socialDark },
+  socialDark: { backgroundColor: colors.socialDark, borderWidth: 1, borderColor: 'rgba(227, 227, 227, 0.22)' },
   socialLabel: { fontFamily: font.semibold, fontSize: 16, lineHeight: 22 },
   footerLink: {
     alignSelf: 'center',

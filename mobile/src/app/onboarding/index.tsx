@@ -18,6 +18,7 @@ export default function WelcomeScreen() {
     <Screen
       scroll={false}
       footerBorder={false}
+      maxWidth={430}
       footer={
         <Animated.View
           entering={reduceMotion ? undefined : FadeIn.duration(420).delay(280)}
@@ -66,36 +67,36 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  top: { alignItems: 'center', gap: space.xxl, paddingTop: space.sm },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  mark: { width: 56, height: 64 },
+  top: { alignItems: 'center', gap: space.xl, paddingTop: space.xs },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: space.sm + 2 },
+  mark: { width: 48, height: 56 },
   wordmark: {
     fontFamily: font.bold,
-    fontSize: 42,
-    lineHeight: 48,
+    fontSize: 38,
+    lineHeight: 44,
     color: colors.text,
-    letterSpacing: -0.8,
+    letterSpacing: -0.7,
   },
-  copy: { alignItems: 'center', gap: space.md, paddingHorizontal: space.sm },
+  copy: { alignItems: 'center', gap: space.sm, paddingHorizontal: space.sm },
   title: {
     maxWidth: 300,
     textAlign: 'center',
     fontFamily: font.semibold,
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 26,
+    lineHeight: 32,
     color: colors.text,
-    letterSpacing: -0.4,
+    letterSpacing: -0.35,
   },
   subtitle: {
     maxWidth: 300,
     textAlign: 'center',
     fontFamily: font.regular,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 21,
     color: colors.textMuted,
   },
   // The phones bleed to the screen edges, as in the frame.
-  art: { flex: 1, marginHorizontal: -space.xl, marginTop: space.lg, justifyContent: 'center' },
+  art: { flex: 1, marginHorizontal: -space.xl, marginTop: space.md, justifyContent: 'center' },
   phones: { width: '100%', height: '100%' },
   actions: { gap: space.md, paddingBottom: space.xs },
 });

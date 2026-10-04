@@ -62,6 +62,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
 
   return (
     <Screen
+      maxWidth={430}
       header={<BrandHeader onBack={() => router.back()} />}
       footerBorder={false}
       footer={
