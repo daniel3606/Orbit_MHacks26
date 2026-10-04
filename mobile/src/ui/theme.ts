@@ -38,8 +38,8 @@ export const colors = {
   /** Selected chart range. */
   rangeActive: '#2F0C48',
   /** Text inputs and dropdowns on the onboarding screens. */
-  field: 'rgba(0, 0, 0, 0.2)',
-  fieldBorder: '#E3E3E3',
+  field: 'rgba(0, 0, 0, 0.28)',
+  fieldBorder: 'rgba(227, 227, 227, 0.38)',
   /** "Sign in with Google" / "Sign in with Apple" buttons. */
   socialLight: '#FFFFFF',
   socialLightBorder: '#D4D4D4',

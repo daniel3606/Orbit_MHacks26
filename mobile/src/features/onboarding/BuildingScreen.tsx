@@ -96,7 +96,7 @@ export function BuildingScreen() {
       ) : null}
       <View style={[styles.headlineWrap, { top: centerY + HEADLINE_OFFSET }]}>
         <Text style={styles.headline} maxFontSizeMultiplier={1.2}>
-          Building Your Personal Experience...
+          Building your personal experience…
         </Text>
       </View>
     </Animated.View>
@@ -110,17 +110,19 @@ const styles = StyleSheet.create({
     right: 0,
     textAlign: 'center',
     fontFamily: font.regular,
-    fontSize: 25,
+    fontSize: 22,
     lineHeight: NAME_LINE,
-    color: colors.text,
+    color: colors.textMuted,
+    letterSpacing: 0.2,
   },
   headlineWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   headline: {
-    width: 283,
+    width: 300,
     textAlign: 'center',
     fontFamily: font.semibold,
-    fontSize: 35,
-    lineHeight: 48,
-    color: '#FFFFFF',
+    fontSize: 28,
+    lineHeight: 34,
+    color: colors.text,
+    letterSpacing: -0.4,
   },
 });

@@ -11,12 +11,15 @@ import {
 } from 'react-native';
 import { LocalSvg } from 'react-native-svg/css';
 
-import { colors, font, HIT, space } from '@/ui/theme';
+import { colors, font, HIT, radius, space, type } from '@/ui/theme';
 
 const mark = require('../../../assets/images/icon-transparent.png');
 const backArrow = require('../../../assets/images/icons/back.svg');
 const googleIcon = require('../../../assets/images/social/google.svg');
 const appleIcon = require('../../../assets/images/social/apple.svg');
+
+/** Control height shared by auth fields, social buttons, and primary CTAs. */
+export const CONTROL_HEIGHT = 52;
 
 /** Small logo and wordmark centred over an optional back arrow (Sign-in, Sign-up and Q1 frames). */
 export function BrandHeader({ onBack }: { onBack?: () => void }) {
@@ -28,8 +31,8 @@ export function BrandHeader({ onBack }: { onBack?: () => void }) {
           accessibilityLabel="Back"
           hitSlop={8}
           onPress={onBack}
-          style={({ pressed }) => [styles.back, pressed && { opacity: 0.6 }]}>
-          <LocalSvg asset={backArrow} width={35} height={35} />
+          style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
+          <LocalSvg asset={backArrow} width={28} height={28} />
         </Pressable>
       ) : null}
       <View style={styles.brand} accessible accessibilityRole="header" accessibilityLabel="Orbit">
@@ -51,7 +54,10 @@ export function ProgressSegments({ count, current }: { count: number; current: n
       accessibilityValue={{ min: 1, max: count, now: current + 1 }}
       style={styles.segments}>
       {Array.from({ length: count }, (_, i) => (
-        <View key={i} style={[styles.segment, { backgroundColor: i <= current ? colors.text : colors.secondary }]} />
+        <View
+          key={i}
+          style={[styles.segment, { backgroundColor: i <= current ? colors.text : 'rgba(227, 227, 227, 0.16)' }]}
+        />
       ))}
     </View>
   );
@@ -62,7 +68,6 @@ export function PillButton({
   label,
   onPress,
   tone = 'primary',
-  compact,
   disabled,
   busy,
   accessibilityHint,
@@ -70,7 +75,7 @@ export function PillButton({
   label: string;
   onPress: () => void;
   tone?: 'primary' | 'light';
-  /** The shorter Continue button under a form. */
+  /** @deprecated Kept for callers; all pills share one control height. */
   compact?: boolean;
   disabled?: boolean;
   busy?: boolean;
@@ -88,14 +93,13 @@ export function PillButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.pill,
-        compact && styles.pillCompact,
         { backgroundColor: tone === 'light' ? colors.text : colors.secondary },
-        { opacity: inactive ? 0.5 : pressed ? 0.85 : 1 },
+        { opacity: inactive ? 0.45 : pressed ? 0.88 : 1 },
       ]}>
       {busy ? (
         <ActivityIndicator color={fg} />
       ) : (
-        <Text style={[compact ? styles.pillLabelCompact : styles.pillLabel, { color: fg }]} maxFontSizeMultiplier={1.4}>
+        <Text style={[styles.pillLabel, { color: fg }]} maxFontSizeMultiplier={1.4}>
           {label}
         </Text>
       )}
@@ -122,7 +126,7 @@ export function AuthField({
         placeholderTextColor={colors.textMuted}
         selectionColor={colors.text}
         keyboardAppearance="dark"
-        style={[styles.field, error ? { borderColor: colors.danger } : null, style]}
+        style={[styles.field, error ? styles.fieldInvalid : null, style]}
         {...input}
       />
       {error ? (
@@ -144,27 +148,34 @@ export function OrDivider() {
   );
 }
 
-export function SocialButtons({ onPress }: { onPress: (provider: 'google' | 'apple') => void }) {
+export function SocialButtons({
+  mode = 'sign-in',
+  onPress,
+}: {
+  mode?: 'sign-in' | 'sign-up';
+  onPress: (provider: 'google' | 'apple') => void;
+}) {
+  const verb = mode === 'sign-up' ? 'Sign up' : 'Sign in';
   return (
-    <View style={{ gap: space.lg }}>
+    <View style={styles.socialStack}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Sign in with Google"
+        accessibilityLabel={`${verb} with Google`}
         onPress={() => onPress('google')}
-        style={({ pressed }) => [styles.social, styles.socialLight, pressed && { opacity: 0.85 }]}>
-        <LocalSvg asset={googleIcon} width={20} height={20} />
+        style={({ pressed }) => [styles.social, styles.socialLight, pressed && styles.pressed]}>
+        <LocalSvg asset={googleIcon} width={18} height={18} />
         <Text style={[styles.socialLabel, { color: colors.socialLightText }]} maxFontSizeMultiplier={1.4}>
-          Sign in with Google
+          {verb} with Google
         </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Sign in with Apple"
+        accessibilityLabel={`${verb} with Apple`}
         onPress={() => onPress('apple')}
-        style={({ pressed }) => [styles.social, styles.socialDark, pressed && { opacity: 0.85 }]}>
-        <LocalSvg asset={appleIcon} width={20} height={20} />
+        style={({ pressed }) => [styles.social, styles.socialDark, pressed && styles.pressed]}>
+        <LocalSvg asset={appleIcon} width={18} height={18} />
         <Text style={[styles.socialLabel, { color: colors.socialLight }]} maxFontSizeMultiplier={1.4}>
-          Sign in with Apple
+          {verb} with Apple
         </Text>
       </Pressable>
     </View>
@@ -172,11 +183,25 @@ export function SocialButtons({ onPress }: { onPress: (provider: 'google' | 'app
 }
 
 /** "Don't have an account? Sign Up" at the foot of the auth screens. */
-export function FooterLink({ label, onPress }: { label: string; onPress: () => void }) {
+export function FooterLink({
+  prompt,
+  action,
+  onPress,
+}: {
+  prompt: string;
+  action: string;
+  onPress: () => void;
+}) {
   return (
-    <Pressable accessibilityRole="link" onPress={onPress} hitSlop={8} style={styles.footerLink}>
-      <Text style={styles.footerLinkText} maxFontSizeMultiplier={1.4}>
-        {label}
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`${prompt} ${action}`}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [styles.footerLink, pressed && styles.pressed]}>
+      <Text style={styles.footerPrompt} maxFontSizeMultiplier={1.4}>
+        {prompt}{' '}
+        <Text style={styles.footerAction}>{action}</Text>
       </Text>
     </Pressable>
   );
@@ -184,46 +209,66 @@ export function FooterLink({ label, onPress }: { label: string; onPress: () => v
 
 const styles = StyleSheet.create({
   header: { height: HIT, justifyContent: 'center', alignItems: 'center' },
-  back: { position: 'absolute', left: -space.xs, width: HIT, height: HIT, alignItems: 'center', justifyContent: 'center' },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  mark: { width: 32, height: 37 },
-  wordmark: { fontFamily: font.bold, fontSize: 30, lineHeight: 38, color: colors.text },
-  segments: { flexDirection: 'row', gap: 5 },
-  segment: { flex: 1, height: 5, borderRadius: 3 },
-  pill: { minHeight: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xl },
-  pillCompact: { minHeight: 43 },
-  pillLabel: { fontFamily: font.medium, fontSize: 20 },
-  pillLabelCompact: { fontFamily: font.semibold, fontSize: 16 },
+  back: {
+    position: 'absolute',
+    left: -space.sm,
+    width: HIT,
+    height: HIT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  mark: { width: 28, height: 32 },
+  wordmark: { fontFamily: font.bold, fontSize: 26, lineHeight: 32, color: colors.text, letterSpacing: -0.3 },
+  segments: { flexDirection: 'row', gap: 6, paddingTop: space.xs },
+  segment: { flex: 1, height: 3, borderRadius: 2 },
+  pill: {
+    minHeight: CONTROL_HEIGHT,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.xl,
+  },
+  pillLabel: { ...type.label, fontFamily: font.semibold, fontSize: 17, lineHeight: 22 },
   fieldWrap: { gap: space.sm },
-  fieldLabel: { fontFamily: font.medium, fontSize: 14, lineHeight: 19, color: colors.text },
+  fieldLabel: { fontFamily: font.medium, fontSize: 14, lineHeight: 18, color: colors.text },
   field: {
-    height: 50,
+    height: CONTROL_HEIGHT,
     paddingHorizontal: space.lg,
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.fieldBorder,
     backgroundColor: colors.field,
     color: colors.text,
     fontFamily: font.medium,
     fontSize: 16,
+    lineHeight: 22,
   },
+  fieldInvalid: { borderColor: colors.danger },
   fieldError: { fontFamily: font.medium, fontSize: 13, lineHeight: 18, color: colors.danger },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
-  rule: { flex: 1, height: 1, backgroundColor: colors.text, opacity: 0.5 },
-  or: { fontFamily: font.regular, fontSize: 20, lineHeight: 26, color: '#FFFFFF' },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.text, opacity: 0.22 },
+  or: { ...type.caption, color: colors.textMuted, textTransform: 'lowercase' },
+  socialStack: { gap: space.md },
   social: {
-    minHeight: HIT,
+    minHeight: CONTROL_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: space.sm + 2,
     paddingHorizontal: space.lg,
-    paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radius.md,
   },
   socialLight: { backgroundColor: colors.socialLight, borderWidth: 1, borderColor: colors.socialLightBorder },
   socialDark: { backgroundColor: colors.socialDark },
-  socialLabel: { fontFamily: font.semibold, fontSize: 16, lineHeight: 24 },
-  footerLink: { alignSelf: 'center', minHeight: HIT, justifyContent: 'center' },
-  footerLinkText: { fontFamily: font.medium, fontSize: 15, color: colors.textSubtle, textDecorationLine: 'underline' },
+  socialLabel: { fontFamily: font.semibold, fontSize: 16, lineHeight: 22 },
+  footerLink: {
+    alignSelf: 'center',
+    minHeight: HIT,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+  },
+  footerPrompt: { fontFamily: font.regular, fontSize: 15, lineHeight: 20, color: colors.textMuted, textAlign: 'center' },
+  footerAction: { fontFamily: font.semibold, color: colors.text, textDecorationLine: 'underline' },
+  pressed: { opacity: 0.72 },
 });
