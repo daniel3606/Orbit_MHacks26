@@ -248,8 +248,10 @@ class AssistantHandler:
         if practice and (len(tickers) != 1 or not _TICKER.match(tickers[0])):
             practice = None
         log.info(
-            "assistant kind=answer_message intent=%s symbols=%s news=%s market_open=%s llm=%s fallback=%s",
+            "assistant kind=answer_message intent=%s lookup=%s context=%s symbols=%s news=%s market_open=%s llm=%s fallback=%s",
             resolution.intent,
+            resolution.looked_up,
+            resolution.used_context,
             ",".join(tickers),
             "failed" if evidence.news_failed else "ok" if evidence.news_checked else "skipped",
             evidence.market_open,
@@ -437,14 +439,15 @@ def _recent_briefs(messages: list[dict[str, Any]]) -> tuple[str, ...]:
 
 
 def _active_ticker(messages: list[dict[str, Any]]) -> str | None:
+    """The company the conversation is about, from rows the worker wrote. User text never sets it."""
     for row in reversed(messages):
-        if str(row.get("status") or "") not in {"complete", "pending"}:
+        if row.get("role") != "assistant" or str(row.get("status") or "") not in {"complete", "pending"}:
             continue
         ticker = _ticker_from_body(str(row.get("body") or ""))
         if ticker:
             return ticker
         match = re.search(r"quote:([A-Z][A-Z0-9.]{0,9})", str(row.get("citations") or ""))
-        if match and row.get("role") == "assistant":
+        if match:
             return match.group(1)
     return None
 

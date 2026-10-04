@@ -45,22 +45,76 @@ _EDUCATION = {
         "If the market is closed, the order can stay pending until the next open."
     ),
     "trend": TREND_MEANING,
+    "daily_move": (
+        "Typical daily move tells you how much a stock normally moves in one trading day. "
+        "It doesn't cause the stock to move; it gives you context. "
+        "For example, if a stock usually moves about 1% a day, a 5% move would be unusually large."
+    ),
+    "volatility": (
+        "Volatility is how much a stock's price tends to swing up and down. "
+        "A more volatile stock makes bigger moves in both directions, so its price can change a lot in a short time. "
+        "Orbit shows this as the typical daily move."
+    ),
+    "volume": (
+        "Volume is the number of shares traded in a period. "
+        "It doesn't push the price up or down by itself; it shows how much trading is behind a move. "
+        "A big move on unusually high volume means many buyers and sellers took part."
+    ),
+    "orders": (
+        "A market order buys or sells right away at the best price available. "
+        "A limit order only fills at your price or better, so it may not fill at all. "
+        "Market orders are simple, but the price you get can differ from the last quote when a stock is moving fast."
+    ),
+    "zero": (
+        "Yes. A stock can fall to zero, usually when a company goes bankrupt and nothing is left for shareholders. "
+        "It's rare for large, established companies, but it happens. "
+        "That's one reason people spread their money across many companies."
+    ),
+    "moves": (
+        "A stock's price moves when buyers and sellers change what they're willing to pay. "
+        "Company results, news, interest rates, and the mood of the whole market can all shift that balance. "
+        "Many daily moves have no single clear reason."
+    ),
+    "general": (
+        "I can explain investing ideas like volatility, volume, P/E, and Trend Score, "
+        "or look at a company Orbit follows. Which would help?"
+    ),
+}
+_EDUCATION_FOLLOW = {
+    "trend": ["How is the score calculated?", "What is a stock?"],
+    "daily_move": ["What is volatility?", "What does Trend Score mean?"],
+    "volatility": ["What is typical daily move?", "What does Trend Score mean?"],
+    "volume": ["What is volatility?", "What does Trend Score mean?"],
 }
 
 
 def education_key(text: str) -> str:
     lowered = text.lower()
-    if "trend score" in lowered:
+    if "trend score" in lowered or re.search(r"\bscore calculated\b", lowered):
         return "trend"
     if "p/e" in lowered or "price to earnings" in lowered or "price-to-earnings" in lowered:
         return "pe"
-    if "eps" in lowered or "earnings per share" in lowered:
+    if re.search(r"\beps\b", lowered) or "earnings per share" in lowered:
         return "eps"
     if "market cap" in lowered:
         return "cap"
-    if "practice" in lowered or "paper" in lowered:
+    if re.search(r"\b(?:practice|paper) trad", lowered):
         return "paper"
-    return "stock"
+    if re.search(r"\b(?:typical|daily) move", lowered):
+        return "daily_move"
+    if "volatil" in lowered:
+        return "volatility"
+    if re.search(r"\bvolume\b", lowered):
+        return "volume"
+    if re.search(r"\b(?:market|limit) orders?\b", lowered):
+        return "orders"
+    if re.search(r"\b(?:zero|bankrupt\w*)\b", lowered):
+        return "zero"
+    if re.search(r"\bwhy do(?:es)? (?:a )?stocks?\b|\bwhat makes (?:a )?stocks?\b|\bwhy do prices\b", lowered):
+        return "moves"
+    if re.search(r"\bstocks?\b", lowered):
+        return "stock"
+    return "general"
 
 
 def build_packet(
@@ -151,12 +205,7 @@ def fallback_answer(
         )
     if intent == "education":
         key = education_key(user_text)
-        follow = (
-            ["How is the score calculated?", "What is a stock?"]
-            if key == "trend"
-            else ["What does Trend Score mean?"]
-        )
-        return _EDUCATION[key], [], follow, None
+        return _EDUCATION[key], [], _EDUCATION_FOLLOW.get(key, ["What does Trend Score mean?"]), None
     if not tickers:
         if missing:
             return (
@@ -165,7 +214,12 @@ def fallback_answer(
                 ["What is a stock?"],
                 None,
             )
-        return "Which company do you want to look at?", [], ["What is a stock?", "How does practice trading work?"], None
+        lead = "Which company do you want to look at?"
+        if intent == "recommendation":
+            lead = f"I can't pick a stock for you, but I can help you evaluate a company Orbit follows. {lead}"
+        elif intent == "prediction":
+            lead = f"No one can know the next price move reliably. {lead}"
+        return lead, [], ["What is a stock?", "How does practice trading work?"], None
 
     _packet, sources, level = build_packet(evidence, tickers, intent=intent, include_definition=False)
     citations = [{"id": source.id, "as_of": source.as_of} for source in sources]

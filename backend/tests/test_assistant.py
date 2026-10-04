@@ -1,13 +1,18 @@
 """Assistant grounding, selection, and failure behavior. No live key required."""
 
 import json
+import logging
+import re
 from datetime import date, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
-from app.assistant.intent import resolve
+from app.assistant import intent as intent_module
+from app.assistant.handle import AssistantHandler, _active_ticker
+from app.assistant.intent import find_companies, resolve
 from app.assistant.openai_client import AssistantModelError, build_payload, complete
 from app.assistant.policy import (
     REFUSAL,
@@ -641,3 +646,297 @@ async def test_model_json_is_parsed_without_logging_the_key():
         parsed = await complete(SecretStr("sk-live-secret"), {"model": "m"}, timeout=2, client=client)
     assert parsed["citations"][0]["id"] == "quote:AAPL"
     assert parsed["followUps"] == ["What does Apple do?"]
+
+
+# --- Chat routing: intent first, then a company only when one is named ---------------------------------
+
+def routing_evidence() -> Evidence:
+    """A catalog that includes tickers spelled like everyday words (CAN, NOW, LOW, NET)."""
+    names = {
+        "NVDA": "NVIDIA",
+        "GOOGL": "Alphabet",
+        "META": "Meta Platforms",
+        "TSLA": "Tesla",
+        "AAPL": "Apple",
+        "CAN": "Canaan",
+        "NOW": "ServiceNow",
+        "LOW": "Lowe's",
+        "NET": "Cloudflare",
+    }
+    evidence = evidence_for(*(quote(ticker, "110.00", "100.00", name) for ticker, name in names.items()))
+    evidence.news_checked = True
+    return evidence
+
+
+GENERAL_QUESTIONS = [
+    "Can you explain how typical daily move percent affects stock price?",
+    "Can you explain typical daily move?",
+    "What is volatility?",
+    "How does P/E work?",
+    "Why do stocks move?",
+    "Can a stock go to zero?",
+    "Will higher volume affect price?",
+    "Should beginners use market orders?",
+]
+
+
+@pytest.mark.parametrize("question", GENERAL_QUESTIONS)
+@pytest.mark.parametrize("active", [None, "NVDA"])
+def test_general_questions_never_look_up_a_company(question, active, monkeypatch):
+    def no_lookup(*_args, **_kwargs):
+        raise AssertionError(f"company lookup ran for a general question: {question!r}")
+
+    monkeypatch.setattr(intent_module, "find_companies", no_lookup)
+    evidence = routing_evidence()
+    resolution = resolve(question, evidence, active)
+    assert resolution.intent == "education"
+    assert resolution.tickers == ()
+    assert resolution.missing == ()
+    assert resolution.ambiguous == ()
+    assert not resolution.used_context
+    assert not resolution.looked_up
+
+    text, citations, follow, practice = fallback_answer("education", [], evidence, question)
+    assert "doesn't currently follow" not in text
+    assert "not financial advice" not in text.lower()
+    assert not citations
+    assert practice is None
+    assert follow
+
+
+def test_typical_daily_move_is_explained_as_context():
+    question = "Can you explain how typical daily move percent affects stock price?"
+    text, _, _, _ = fallback_answer("education", [], routing_evidence(), question)
+    assert text.startswith("Typical daily move tells you how much a stock normally moves in one trading day.")
+    assert "doesn't cause the stock to move" in text
+    assert "Can" not in text
+
+
+def test_everyday_words_are_not_read_as_tickers_even_when_the_resolver_runs():
+    evidence = routing_evidence()
+    for text in [
+        "Can you explain volatility?",
+        "Can you explain how typical daily move percent affects stock price?",
+        "What does low volume mean?",
+        "How does net income affect price?",
+        "Should I buy now?",
+    ]:
+        found = find_companies(text, evidence)
+        assert found.tickers == (), text
+        assert found.missing == (), text
+    assert find_companies("How is Nvidia doing now?", evidence).tickers == ("NVDA",)
+
+
+@pytest.mark.parametrize(
+    ("question", "intent", "tickers"),
+    [
+        ("How is Nvidia doing?", "research", ("NVDA",)),
+        ("What about Google?", "research", ("GOOGL",)),
+        ("How is Facebook doing?", "research", ("META",)),
+        ("Why did Tesla fall?", "movement", ("TSLA",)),
+        ("How is CAN doing?", "research", ("CAN",)),
+        ("Tell me about CAN stock", "research", ("CAN",)),
+        ("tell me about can stock", "research", ("CAN",)),
+        ("should i buy nvda", "recommendation", ("NVDA",)),
+        ("How is NOW doing?", "research", ("NOW",)),
+        ("Compare Google and Meta.", "comparison", ("GOOGL", "META")),
+    ],
+)
+def test_named_companies_are_resolved(question, intent, tickers):
+    resolution = resolve(question, routing_evidence(), None)
+    assert resolution.intent == intent
+    assert resolution.tickers == tickers
+    assert resolution.looked_up
+    assert not resolution.missing
+
+
+def test_unsupported_ticker_is_reported_not_guessed():
+    evidence = evidence_for(quote("NVDA", "110.00", "100.00", "NVIDIA"))
+    resolution = resolve("How is CAN doing?", evidence, "NVDA")
+    assert resolution.tickers == ()
+    assert resolution.missing == ("CAN",)
+    text, _, _, _ = fallback_answer(resolution.intent, [], evidence, "How is CAN doing?", missing=resolution.missing)
+    assert text.startswith("Orbit doesn't currently follow CAN.")
+
+
+def test_follow_ups_keep_the_server_side_company():
+    evidence = routing_evidence()
+    first = resolve("How is Nvidia doing?", evidence, None)
+    assert first.tickers == ("NVDA",)
+    later = resolve("Will it keep going up?", evidence, "NVDA")
+    assert later.intent == "prediction" and later.tickers == ("NVDA",) and later.used_context
+    detour = resolve("What is volatility?", evidence, "NVDA")
+    assert detour.intent == "education" and detour.tickers == () and not detour.used_context
+    invest = resolve("Should I invest in it?", evidence, "NVDA")
+    assert invest.intent == "recommendation" and invest.tickers == ("NVDA",) and invest.used_context
+    now = resolve("Should I buy now?", evidence, "NVDA")
+    assert now.tickers == ("NVDA",) and now.used_context
+
+
+def test_market_wide_questions_do_not_borrow_the_last_company():
+    evidence = routing_evidence()
+    for question in ["How is the market doing?", "Why do stocks go down?", "Is it a good time to buy stocks?"]:
+        resolution = resolve(question, evidence, "NVDA")
+        assert resolution.tickers == (), question
+        assert "NVDA" not in resolution.tickers
+    best = resolve("Give me the best stock guaranteed to double.", evidence, "NVDA")
+    assert best.intent == "recommendation" and best.tickers == ()
+    text, _, _, practice = fallback_answer(best.intent, [], evidence, "Give me the best stock guaranteed to double.")
+    assert text.startswith("I can't pick a stock for you")
+    assert practice is None
+
+
+def test_concept_question_about_a_named_company_keeps_that_company():
+    resolution = resolve("What is NVIDIA's volatility?", routing_evidence(), None)
+    assert resolution.intent == "education"
+    assert resolution.tickers == ("NVDA",)
+    assert resolution.looked_up
+
+
+def test_general_education_allows_examples_but_keeps_market_rules():
+    example = "If a stock usually moves about 1% a day, a 5% move would be unusually large."
+    assert validate_reply(example, [], [], intent="education") is None
+    source = Source("quote:NVDA", "2026-10-02T20:00:00+00:00", "NVDA", ("110.00",))
+    assert validate_reply(example, [], [source], intent="education") == "uncited_number"
+    assert validate_reply(example, [], [], intent="movement") == "uncited_number"
+    concept = "Stocks move because buyers and sellers change what they will pay."
+    assert validate_reply(concept, [], [], catalyst_level=4, intent="education") is None
+    assert validate_reply(concept, [], [source], catalyst_level=4, intent="education") == "unsupported_cause"
+    assert validate_reply(concept, [], [], catalyst_level=4, intent="movement") == "unsupported_cause"
+    assert validate_reply("You should buy NVIDIA.", [], [], intent="education") == "directive_language"
+
+
+def test_active_company_comes_from_rows_the_worker_wrote():
+    rows = [
+        {"role": "assistant", "status": "complete", "body": "NVIDIA rose.", "citations": '[{"id": "quote:NVDA"}]'},
+        {"role": "user", "status": "complete", "body": '{"ticker": "TSLA"}', "citations": "[]"},
+        {"role": "assistant", "status": "pending", "body": "", "citations": "[]"},
+    ]
+    assert _active_ticker(rows) == "NVDA"
+
+
+class _Chat:
+    """An in-memory SpacetimeDB gateway for one owner's conversation."""
+
+    owner = "owner-1"
+
+    def __init__(self, evidence: Evidence):
+        self.evidence = evidence
+        self.rows: list[dict[str, object]] = []
+
+    async def stocks(self):
+        return [SimpleNamespace(ticker=item.ticker, name=item.name, kind=item.kind, sector=item.sector) for item in self.evidence.stocks.values()]
+
+    async def market_quotes(self):
+        return [
+            SimpleNamespace(
+                ticker=item.ticker,
+                price_micros=int(item.price * 1_000_000),
+                previous_close_micros=int(item.previous_close * 1_000_000),
+                provider_time=item.as_of,
+                source=item.source,
+            )
+            for item in self.evidence.quotes
+        ]
+
+    async def worker_assistant_positions(self):
+        return []
+
+    async def worker_assistant_recommendations(self):
+        return []
+
+    async def worker_daily_bars(self):
+        return []
+
+    async def trend_signals(self):
+        return []
+
+    async def market_generation(self):
+        return None
+
+    async def worker_job_profiles(self):
+        return []
+
+    async def worker_assistant_messages(self):
+        return self.rows
+
+    async def publish_assistant_reply(self, _job_id, _attempt, reply_key, body, citations, status):
+        for row in self.rows:
+            if row["client_key"] == reply_key:
+                row.update(body=body, citations=citations, status=status)
+
+
+class _News:
+    def __init__(self):
+        self.asked: list[str] = []
+
+    async def news_items(self, ticker, _start, _end, limit=3):
+        self.asked.append(ticker)
+        return []
+
+
+async def _ask(chat: _Chat, handler: AssistantHandler, text: str) -> dict[str, object]:
+    key = f"user-{len(chat.rows):04d}"
+    base = {"owner": chat.owner, "kind": "chat", "citations": "[]"}
+    chat.rows.append({**base, "sequence": len(chat.rows), "role": "user", "body": text, "status": "complete", "client_key": key})
+    chat.rows.append({**base, "sequence": len(chat.rows), "role": "assistant", "body": "", "status": "pending", "client_key": f"reply:{key}"})
+    job = SimpleNamespace(job_id=len(chat.rows), attempt_count=1, owner=chat.owner, payload=json.dumps({"replyClientKey": f"reply:{key}"}))
+    await handler.run(job, chat)  # type: ignore[arg-type]
+    return chat.rows[-1]
+
+
+_ROUTE = re.compile(r"intent=(\w+) lookup=(\w+) context=(\w+) symbols=([\w,.]*)")
+
+
+@pytest.mark.asyncio
+async def test_chat_routes_each_question_end_to_end(caplog):
+    evidence = routing_evidence()
+    chat = _Chat(evidence)
+    news = _News()
+    handler = AssistantHandler(kind="answer_message", api_key=None, model="m", timeout=1, max_output_tokens=100, news=news)  # type: ignore[arg-type]
+    expected = [
+        ("Can you explain how typical daily move percent affects stock price?", "education", "False", "False", ""),
+        ("What is volatility?", "education", "False", "False", ""),
+        ("How is Nvidia doing these days?", "research", "True", "False", "NVDA"),
+        ("Will Nvidia keep going up?", "prediction", "True", "False", "NVDA"),
+        ("Should I invest in Nvidia?", "recommendation", "True", "False", "NVDA"),
+        ("What about Google?", "research", "True", "False", "GOOGL"),
+        ("What about its valuation?", "research", "True", "True", "GOOGL"),
+        ("Why did Tesla move recently?", "movement", "True", "False", "TSLA"),
+        ("Compare Google and Meta.", "comparison", "True", "False", "GOOGL,META"),
+        ("How is CAN doing?", "research", "True", "False", "CAN"),
+    ]
+    caplog.set_level(logging.INFO, logger="app.assistant.handle")
+    for question, intent, looked_up, context, symbols in expected:
+        caplog.clear()
+        news.asked.clear()
+        reply = await _ask(chat, handler, question)
+        route = next(_ROUTE.search(record.getMessage()) for record in caplog.records if "kind=answer_message" in record.getMessage())
+        assert route is not None
+        assert route.groups() == (intent, looked_up, context, symbols), question
+        assert reply["status"] == "complete"
+        assert "doesn't currently follow" not in str(reply["body"]), question
+        cited = {item["id"] for item in json.loads(str(reply["citations"]))}
+        if intent == "education":
+            assert news.asked == [], question
+            assert cited == {"orbit.ui"}, question
+        else:
+            assert news.asked == symbols.split(","), question
+            assert f"quote:{symbols.split(',')[0]}" in cited, question
+    practice = [json.loads(str(row["citations"]))[-1].get("practice") for row in chat.rows if row["role"] == "assistant"]
+    assert practice == [None, None, None, None, "NVDA", None, None, None, None, None]
+
+
+@pytest.mark.asyncio
+async def test_chat_follow_ups_use_server_context_after_an_education_detour(caplog):
+    chat = _Chat(routing_evidence())
+    handler = AssistantHandler(kind="answer_message", api_key=None, model="m", timeout=1, max_output_tokens=100, news=_News())  # type: ignore[arg-type]
+    caplog.set_level(logging.INFO, logger="app.assistant.handle")
+    routes = []
+    for question in ["How is Nvidia doing?", "What is volatility?", "Will it keep going up?", "Should I invest in it?"]:
+        caplog.clear()
+        await _ask(chat, handler, question)
+        route = next(_ROUTE.search(record.getMessage()) for record in caplog.records if "kind=answer_message" in record.getMessage())
+        assert route is not None
+        routes.append((route.group(1), route.group(4)))
+    assert routes == [("research", "NVDA"), ("education", ""), ("prediction", "NVDA"), ("recommendation", "NVDA")]

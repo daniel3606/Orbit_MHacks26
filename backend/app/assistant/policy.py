@@ -216,13 +216,15 @@ def validate_reply(
     activity_labels: tuple[str, ...] = (),
 ) -> str | None:
     """Return an error code when the reply is not allowed to be stored."""
+    # A concept answer with no market data in the packet: it explains no move and quotes no figure.
+    general = intent == "education" and not sources
     if not text.strip():
         return "empty_reply"
     if len(text) > MAX_REPLY_CHARS:
         return "reply_too_long"
     if _DIRECTIVE.search(text):
         return "directive_language"
-    if catalyst_level is not None and catalyst_level > 1 and _CAUSE.search(text):
+    if catalyst_level is not None and catalyst_level > 1 and not general and _CAUSE.search(text):
         return "unsupported_cause"
     if _SECTOR_COMPARE.search(text):
         return "unsupported_sector"
@@ -245,6 +247,8 @@ def validate_reply(
         if citation.get("as_of") and citation["as_of"] != by_id[source_id].as_of:
             return "citation_date_mismatch"
         seen.add(source_id)
+    if general:
+        return None  # its numbers are worked examples
     allowed: set[str] = set()
     for source in sources:
         if source.id in seen or not citations:
@@ -394,6 +398,7 @@ Do not say it is compared with its sector. The packet does not include a sector 
 
 EDUCATION
 For stable general investing concepts, explain them in plain language. Do not add a disclaimer paragraph.
+When entities is empty, answer the concept itself. Any numbers must be clearly hypothetical examples, never a real company's figures.
 When explaining Trend Score, use only the definition in the packet.
 
 STYLE
