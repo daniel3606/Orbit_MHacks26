@@ -242,6 +242,9 @@ const EMPTY_MARKET: MarketVM = {
   capabilities: [],
 };
 
+/** How long the market subscription outlives its last screen. */
+const MARKET_RELEASE_DELAY_MS = 2000;
+
 const micros = (v: bigint) => Number(v) / 1_000_000;
 
 export type RealtimeSnapshot = {
@@ -322,6 +325,8 @@ class ConnectionManager {
   private jobObservations = new Map<string, { updatedAtMicros: bigint; observedAt: Date }>();
   private marketRefs = 0;
   private marketHandle: { unsubscribe(): void; isActive(): boolean } | null = null;
+  /** Pending teardown after the last market screen lets go. */
+  private marketTeardown: ReturnType<typeof setTimeout> | null = null;
 
   // ---- store plumbing (useSyncExternalStore) ----
 
@@ -808,6 +813,10 @@ class ConnectionManager {
 
   /** Call when a market screen gains focus; returns the release function. */
   acquireMarket(): () => void {
+    if (this.marketTeardown) {
+      clearTimeout(this.marketTeardown);
+      this.marketTeardown = null;
+    }
     this.marketRefs += 1;
     if (this.marketRefs === 1 && this.conn && this.snapshot.status === 'ready') {
       const gen = this.generation;
@@ -818,7 +827,12 @@ class ConnectionManager {
       if (released) return;
       released = true;
       this.marketRefs -= 1;
-      if (this.marketRefs === 0) {
+      if (this.marketRefs > 0) return;
+      // A screen handing off to the next one (stock → trade ticket) releases
+      // before the next acquires. Waiting keeps one subscription across the handoff.
+      this.marketTeardown = setTimeout(() => {
+        this.marketTeardown = null;
+        if (this.marketRefs > 0) return;
         try {
           if (this.marketHandle?.isActive()) this.marketHandle.unsubscribe();
         } catch {
@@ -826,7 +840,7 @@ class ConnectionManager {
         }
         this.marketHandle = null;
         this.patch({ market: EMPTY_MARKET });
-      }
+      }, MARKET_RELEASE_DELAY_MS);
     };
   }
 
