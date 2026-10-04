@@ -244,6 +244,10 @@ class SpacetimeGateway:
         """Stores Jev judgments under the caller's lease on the job that produced them."""
         await self.call_reducer("record_news_classifications", [job_id, attempt, list(rows)])
 
+    async def publish_stock_news(self, args: Sequence[Any]) -> None:
+        """Replaces one ticker's news and completes the `stock_news` job under its lease."""
+        await self.call_reducer("publish_stock_news", list(args))
+
     async def worker_assistant_messages(self) -> list[dict[str, Any]]:
         return await self._view("worker_assistant_messages")
 

@@ -578,6 +578,26 @@ export const StockInput = __t.object("StockInput", {
 });
 export type StockInput = __Infer<typeof StockInput>;
 
+export const StockNews = __t.object("StockNews", {
+  ticker: __t.string(),
+  get stories() {
+    return __t.array(StockNewsStory);
+  },
+  classification: __t.string(),
+  classifierVersion: __t.string(),
+  checkedAt: __t.timestamp(),
+  jobId: __t.u64(),
+});
+export type StockNews = __Infer<typeof StockNews>;
+
+export const StockNewsStory = __t.object("StockNewsStory", {
+  headline: __t.string(),
+  source: __t.string(),
+  url: __t.string(),
+  publishedAt: __t.timestamp(),
+});
+export type StockNewsStory = __Infer<typeof StockNewsStory>;
+
 export const TrendSignal = __t.object("TrendSignal", {
   ticker: __t.string(),
   generation: __t.u64(),

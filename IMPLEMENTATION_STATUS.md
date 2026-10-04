@@ -1,8 +1,8 @@
 # Implementation status
 
-_Last updated: 2026-10-04 · PRD phases 0–2, personalized matches (fit-v1.0.0), Daily Discovery (discovery-v1.0.0), Jev news classification (jev-news-v1), and paper orders on one bound Alpaca paper account_
+_Last updated: 2026-10-04 · PRD phases 0–2, personalized matches (fit-v1.0.0), Daily Discovery (discovery-v1.0.0), Jev news classification (jev-news-v2), Stock Detail news, and paper orders on one bound Alpaca paper account_
 
-## News classification (jev-news-v1, 2026-10-04)
+## News classification (jev-news-v2, 2026-10-04)
 
 Jev classifies the Finnhub headlines that Discovery and the assistant already read. It labels them; it never sets a
 score, weight, threshold, price or ranking. OpenAI still writes every explanation and receives Jev's labels as
@@ -46,11 +46,11 @@ Live behavior (latency, real probabilities, the account's credit balance) has no
 | Question (type) | Field | Rule |
 |---|---|---|
 | `relevance` (noul) | `relevance_score`, `relevant` | P(yes); relevant when ≥ 0.5 |
-| `specific` (noul) | `keep` | relevant and P(reports a concrete development) ≥ 0.5; a listicle, "is it a buy?", or price recap is not kept |
+| `specific` (noul) | `keep` | relevant and P(states a concrete development) ≥ 0.5. Since v2, analysis or opinion built around a real development counts; pure opinion, stock-pick lists and price recaps still do not |
 | `event_type` (choice) | `event_type` | one of the 11 PRD types |
 | `sentiment` (choice) | `sentiment` | whether the reported development is good or bad for the company; asked separately from relevance, so negative ≠ irrelevant |
 | `materiality` (score, 4 levels) | `materiality` | nearest level to the score; ties go down |
-| — | `classifier_version` | `jev-news-v1:<model>`; changing a question, threshold or model changes it, which changes every cache key |
+| — | `classifier_version` | `jev-news-v2:<model>` (v1 → v2 reworded `specific` only); changing a question, threshold or model changes it, which changes every cache key, so v1 and v2 judgments are never mixed |
 
 Thresholds are starting heuristics, not tuned on labeled articles.
 
@@ -61,18 +61,43 @@ Thresholds are starting heuristics, not tuned on labeled articles.
 | Discovery card headline | `keep` | After ranking, the card shows the newest of the pick's 5 most recent company-named stories that Jev kept. If Jev kept none, no headline is shown. | Newest company-named story (the rule before Jev) |
 | Discovery score, news component, `news_count`, reasons | — | **Unchanged.** Same weights, same stories, same numbers (a test compares them with and without Jev) | — |
 | `daily_discovery_item.news_classification` | coverage | `classified`, `partial:<reason>`, `unavailable:<reason>`, `not_configured`, `no_articles` | always recorded |
-| Assistant evidence | `keep` | Stories Jev did not keep for that company are left out of the evidence and citations | All stories stay, unlabeled |
+| Assistant evidence | `keep`, ranking | Chat reads up to 8 headlines per company (the home brief keeps 3 per company, as before, since it scans up to 6); Jev's kept stories are ranked (below) and the best 3 become evidence and citations | Newest 3, unlabeled (as before Jev) |
+| Stock Detail News | `keep`, ranking | Up to 3 kept stories: headline, publisher, time, link. No labels or probabilities on screen | Unlabeled headlines that name the company; the row records `unavailable:<reason>` |
 | Assistant packet (OpenAI) | `event_type`, `sentiment`, `materiality` | Per-story `labels`; per-company `newsClassification` with status and reason | `labels: null`, `available: false` plus the reason; the prompt forbids describing tone without labels |
 | Assistant catalyst level | `event_type`, `keep` | Level 1 when a kept story is `earnings` near the quote date; a story Jev did not keep is not coverage | Headline pattern (`earnings`, `quarterly results`) as before |
 | Assistant `newsSignals` | all fields | PRD §12 raw inputs over 7 days: kept events (syndicated copies merged), independent sources, `Σ sentiment·w / Σ w` with `w = relevance · 0.5^(age/36h) · materiality weight` (low .25, medium .5, high .75, critical 1), highest materiality | Omitted. Zero weight is missing, never 0 |
 | Trend Score `news_velocity`, `sentiment_shift`, `breadth_materiality` | — | **Unchanged: still unavailable (`news_phase_pending`).** Each needs a z-score against a 30–60 day news baseline, and ingestion does not read news, so there is no baseline. `backend/app/intelligence/features.py` computes the raw inputs those features are defined on | — |
 
+Ranking (`backend/app/intelligence/stories.py`): `relevance × 0.5^(age/36 h) × materiality weight`, syndicated copies
+merged, best 3 shown newest first. A story Jev judged and did not keep is never shown or cited.
+
+### Stock Detail news
+
+1. Opening Stock Detail calls `request_stock_news(ticker)` (consumer only; active equity only). It queues nothing when
+   the ticker was checked in the last 15 minutes (2 minutes after an incomplete check) or a job for it is already
+   active; at most 12 news jobs are active at once. Jobs are owned by the database identity, like ingestion, so they
+   never crowd a person's `my_jobs`.
+2. The worker's `stock_news` job reads up to 8 Finnhub headlines from the last 7 days, classifies them through the
+   shared service (stored and cached judgments are not billed again), keeps the best 3, and calls
+   `publish_stock_news`, which validates the stories (https links, lengths, no future times, ≤ 3) and replaces the
+   ticker's `stock_news` row and completes the job in one transaction under the lease.
+3. `stock_news` is public, like quotes: headline, publisher, link, time, coverage label. The app subscribes with the
+   other market tables. It shows the stories, "No recent relevant news found." for an empty list, "Checking recent
+   news…" for up to 20 s, then "Recent news isn't available right now." if nothing arrived (for example Finnhub failed
+   three times). The phone holds no Finnhub or Jev key and never calls either.
+
+Live dry run on 2026-10-04 (v2, real Finnhub and Jev, no writes): AAPL 8 candidates → 1 kept ("Mark Your Calendars for
+October 13"); ARM 8 → 2 kept, including the analysis piece on Arm selling its own data-center CPU that v1 dropped and a
+rating upgrade, while "What's Going On With Arm Stock Friday?" (a price recap) stayed out. 16 calls, $0.00099.
+
 ### State
 
+- `stock_news` (public; key `ticker`): up to 3 stories, coverage label, classifier version, checked time, job id.
+  `request_stock_news` (consumer) and `publish_stock_news` (service, under the job lease).
 - `news_classification` (private; key `cacheKey`): ticker, article id, content hash, classifier version, the six
   labels, article time, classification time, job id. Kept to 4,000 rows (oldest pruned to 3,600).
 - `record_news_classifications(jobId, attempt, rows)`: service only; the caller must hold the current, unexpired lease
-  on a running `daily_discovery`, `answer_message` or `home_brief` job. Validates every row (enums, bounds,
+  on a running `daily_discovery`, `answer_message`, `home_brief` or `stock_news` job. Validates every row (enums, bounds,
   `keep ⇒ relevant`, known ticker, no future time) before writing; an existing key keeps its first judgment.
 - `worker_news_classifications`: service-gated view (consumers get no rows).
 - `daily_discovery_item.newsClassification`: additive column with default `''` for sets published before this.
@@ -111,16 +136,23 @@ error bodies (which can quote flagged input) are not logged.
 | Python → real module: lease-checked write, strict DTO read through the view, reuse by a fresh service | `backend/tests/test_worker_integration.py` (on `orbit-test`) |
 | Consumer, rival worker and stale attempt rejected; every invalid field rejected with nothing written; first judgment kept; wrong job kind; finished job | `spacetime/tests/news.test.ts` |
 | Discovery reducer stores and validates the coverage label | `spacetime/tests/discovery.test.ts` |
+| v2 wording; noisy AAPL feed of 8 → the kept stories; analysis with a real development kept; listicles dropped; ranking; syndicated copies once; unclassified fill only names the company | `backend/tests/test_stock_news.py` |
+| Stock news job: company outside Discovery gets news, each story links to its own URL, empty list, repeat run fully cached, Jev down → unlabeled name-matched headlines with reason, no Jev key, Finnhub failure retries, bad jobs, non-https dropped | same |
+| Chat reads 8 candidates and cites at most the best 3 | `backend/tests/test_assistant.py` |
+| Request validation and coalescing, jobs not in `my_jobs`, lease-only publish, every story field validated, row reaches subscribers, fresh row queues nothing | `spacetime/tests/news.test.ts` |
+| News section states, three-story cap, https only, publisher · relative time, link label | `mobile/src/features/stock/news.test.ts` |
 
 ### Not verified or still open
 
-- **No live call has been made.** The contract comes from documentation. Run
-  `ORBIT_LIVE_PROVIDER_TESTS=1 uv run pytest -q -s tests/test_jev_live.py`, then restart the worker and check `/ready`.
+- Live: the worker's start-up check verified the contract on `orbit-dev` (`/ready` → `verified`), and the dry run above
+  exercised v2 on real feeds. Latency under load has not been measured.
 - Thresholds (0.5 relevance, 0.5 specific) and question wording are untuned; no labeled sample exists yet.
-- `orbit-dev` has not been republished with the new table, reducer, view and column. Until `make publish`, the worker
-  keeps classifications in memory and Discovery publishes fail because the reducer does not yet accept the new item field.
+- `orbit-dev` needs `make publish` for `stock_news` and its reducers, then a worker restart. Until then Stock Detail
+  shows "Recent news isn't available right now." after the request fails.
 - Related-but-different stories are not clustered; only identical content is merged.
-- The mobile app does not display labels or coverage yet.
+- The app shows no labels or coverage, by design: Jev is the quality filter.
+- Stock Detail news has not been seen on a device; `orbit-dev` needs the new module first (below).
+- Finnhub's free feed is thin for some tickers: AAPL had one kept story in the last 7 days. The window, not Jev, limits that.
 - `spacetime/tests/market.test.ts` "a real ingestion run (fixture provider)" fails (5 scored signals, needs 10). It fails
   the same way on `main` before this change.
 

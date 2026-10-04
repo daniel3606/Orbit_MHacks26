@@ -1089,3 +1089,59 @@ def test_prompts_keep_classification_with_jev():
     assert "do not relabel stories yourself" in INSTRUCTIONS
     assert "not a forecast of the stock" in INSTRUCTIONS
     assert "Without labels, do not describe its tone" in BRIEF_INSTRUCTIONS
+
+
+class _EightStories:
+    def __init__(self) -> None:
+        self.limits: list[int] = []
+
+    async def news_items(self, ticker, _start, _end, limit=3):
+        self.limits.append(limit)
+        rows = [
+            ("Ten AI stocks to buy now", "Blog"),
+            ("Nvidia's quarter tops forecasts", "Reuters"),
+            ("Micron vs. Qualcomm: revenue trends", "Yahoo"),
+            ("Nvidia sued over chip patents", "Bloomberg"),
+            ("How a student built a #1 app", "Yahoo"),
+            ("Nvidia names a new CFO", "WSJ"),
+            ("Nvidia opens a Tokyo research lab", "Nikkei"),
+            ("Market movers this afternoon", "ChartMill"),
+        ]
+        return [
+            {"id": f"news:{ticker}:{i}", "ticker": ticker, "headline": h, "url": f"https://example.test/{i}", "source": s, "published": f"2026-10-02T{20 - i:02d}:00:00+00:00", "summary": ""}
+            for i, (h, s) in enumerate(rows)
+        ][:limit]
+
+
+class _NvidiaOnly(_Labeler):
+    async def classify_article(self, *, article_id, ticker, headline, text, source, published_at):
+        self.calls += 1
+        if not headline.startswith("Nvidia"):
+            return _OFF_TOPIC
+        return _LEGAL if "sued" in headline else _EARN
+
+
+@pytest.mark.asyncio
+async def test_chat_reads_eight_candidates_and_cites_at_most_the_best_three():
+    evidence = routing_evidence()
+    chat = _ClassifyingChat(evidence)
+    news = _EightStories()
+    labeler = _NvidiaOnly()
+    handler = AssistantHandler(kind="answer_message", api_key=None, model="m", timeout=1, max_output_tokens=100, news=news, classification=NewsClassificationService(labeler))  # type: ignore[arg-type]
+    job = SimpleNamespace(job_id=1, attempt_count=1, owner=chat.owner, payload="{}")
+    await handler._attach_news(evidence, ["NVDA"], job, chat)  # type: ignore[arg-type]
+    assert news.limits == [8] and labeler.calls == 8
+    kept = evidence.news_for("NVDA")
+    assert len(kept) == 3 and all(item.headline.startswith("Nvidia") for item in kept)
+    assert evidence.news_signals["NVDA"].relevant_events == 4  # all four judged; only the best three are cited
+
+
+@pytest.mark.asyncio
+async def test_the_brief_keeps_three_candidates_per_company():
+    evidence = routing_evidence()
+    chat = _ClassifyingChat(evidence)
+    news = _EightStories()
+    brief = AssistantHandler(kind="home_brief", api_key=None, model="m", timeout=1, max_output_tokens=100, news=news, classification=NewsClassificationService(_NvidiaOnly()))  # type: ignore[arg-type]
+    job = SimpleNamespace(job_id=1, attempt_count=1, owner=chat.owner, payload="{}")
+    await brief._attach_news(evidence, ["NVDA", "AAPL"], job, chat)  # type: ignore[arg-type]
+    assert news.limits == [3, 3]

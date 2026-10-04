@@ -111,6 +111,9 @@ call recorded), `verified` (the worker got a schema-valid response), or `fail`, 
   article content, ticker and classifier version, shared by every job, and stored in the private
   `news_classification` table under the job's lease. Jev never changes a Discovery score or a Trend Score; see
   [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md#news-classification-jev-news-v1-2026-10-04) for what each label feeds.
+- Stock Detail asks the server for news (`request_stock_news`); the worker reads up to 8 Finnhub headlines, keeps the
+  best 3 that Jev judges to be about the company, and publishes them to the public `stock_news` table. The phone never
+  calls Finnhub or Jev.
 - Without a key, or when Jev fails, news stays unlabeled and each consumer records why (`not_configured`,
   `unavailable:auth_failed`, …). Nothing falls back to OpenAI, and nothing is read as neutral sentiment.
 - `ORBIT_LIVE_PROVIDER_TESTS=1 uv run pytest -q -s tests/test_jev_live.py` checks the live contract (billed calls).

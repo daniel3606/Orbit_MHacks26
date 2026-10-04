@@ -11,6 +11,7 @@ from app.config.universe import load_universe
 from app.discovery.handler import DailyDiscoveryHandler
 from app.intelligence.jev import JevClassifier
 from app.intelligence.service import NewsClassificationService
+from app.intelligence.stock_news import StockNewsHandler
 from app.market.alpaca import AlpacaHistoricalProvider
 from app.market.finnhub import FinnhubProvider
 from app.market.ingest import IngestMarketHandler
@@ -144,6 +145,8 @@ async def main() -> int:
 
         # Discovery always runs; without a news provider the news component is left out.
         handlers[DailyDiscoveryHandler.kind] = DailyDiscoveryHandler(news_provider, classification=classification)
+        # Stock Detail news; without Finnhub the job fails as `news_not_configured` and the app says so.
+        handlers[StockNewsHandler.kind] = StockNewsHandler(news_provider, classification)
 
         handlers.update(
             assistant_handlers(

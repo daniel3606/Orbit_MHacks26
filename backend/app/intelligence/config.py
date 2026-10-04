@@ -1,4 +1,4 @@
-"""Versioned Jev question set and thresholds (jev-news-v1).
+"""Versioned Jev question set and thresholds (jev-news-v2).
 
 Every question judges what the article reports about one company. None asks for
 a price forecast, a return estimate, or a trading action. The thresholds are
@@ -13,7 +13,9 @@ Consumers read sentiment only from articles with `keep` set.
 
 from app.intelligence.classifier import EVENT_TYPES, MATERIALITIES, SENTIMENTS, EventType, Materiality, Sentiment
 
-QUESTION_SET_VERSION = "jev-news-v1"
+# v2 (2026-10-04): `specific` keeps analysis or opinion that reports a concrete company development
+# (v1 dropped e.g. "Will selling chips strengthen Arm's moat?" though it reports Arm's new data-center CPU).
+QUESTION_SET_VERSION = "jev-news-v2"
 
 # `relevance` (Noul, probability of yes) at or above this → relevant.
 RELEVANCE_THRESHOLD = 0.5
@@ -50,14 +52,20 @@ RELEVANCE_QUESTION: dict[str, object] = {
 SPECIFIC_QUESTION: dict[str, object] = {
     "type": "noul",
     "instructions": (
-        "Does `article` report a specific, concrete development about `company`, such as an announcement, "
-        "result, filing, ruling, deal, launch, or decision? " + _CONTENT_ONLY
+        "Does `article` state at least one concrete, factual development involving `company` — such as an "
+        "announcement, result, product launch, filing, ruling, deal, leadership change, or an analyst's rating "
+        "change — even if most of the article is analysis or opinion? " + _CONTENT_ONLY
     ),
     "criteria": {
-        "true": "`article` reports something that happened or was announced involving `company`.",
+        "true": (
+            "`article` states something that happened or was announced involving `company`, for example a new "
+            "product, a quarterly result, a contract, a lawsuit, or a rating change. Analysis or opinion built "
+            "around that development still counts."
+        ),
         "false": (
-            "`article` is general commentary, a list of stock picks, a recap of a price move with no new "
-            "information, an advertisement, or speculation without a reported development."
+            "`article` is only opinion, a stock pick or list of stocks to buy, general commentary, a recap of a "
+            "price move, historical performance, an advertisement, or speculation, with no development "
+            "involving `company`."
         ),
     },
 }

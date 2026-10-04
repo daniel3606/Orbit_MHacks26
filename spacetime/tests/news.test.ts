@@ -104,11 +104,11 @@ before(async () => {
   rival = await connect();
   cli('grant_service_identity', `"0x${svc.identityHex}"`, '"news-test"');
   cli('grant_service_identity', `"0x${rival.identityHex}"`, '"news-test-rival"');
-  await svc.conn.reducers.registerWorker({ kinds: ['daily_discovery', 'backend_check'] });
+  await svc.conn.reducers.registerWorker({ kinds: ['daily_discovery', 'backend_check', 'stock_news'] });
   await rival.conn.reducers.registerWorker({ kinds: ['daily_discovery'] });
   await subscribe(svc.conn, ['SELECT * FROM worker_jobs', 'SELECT * FROM worker_news_classifications']);
   await subscribe(rival.conn, ['SELECT * FROM worker_jobs']);
-  await subscribe(user.conn, ['SELECT * FROM my_jobs', 'SELECT * FROM worker_news_classifications']);
+  await subscribe(user.conn, ['SELECT * FROM my_jobs', 'SELECT * FROM worker_news_classifications', 'SELECT * FROM stock_news']);
   await svc.conn.reducers.upsertStocks({
     stocks: [
       { ticker: 'SPY', name: 'Benchmark', exchange: 'TEST', industry: 'ETF', sector: '', currency: 'USD', kind: 'benchmark', benchmark: '', displayOrder: 0, logoUrl: '' },
@@ -197,5 +197,70 @@ describe('news classifications', () => {
       svc.conn.reducers.recordNewsClassifications({ jobId: discovery.jobId, attempt: discovery.attemptCount, rows: [row('e')] }),
       'job_not_running'
     );
+  });
+});
+
+describe('stock detail news', () => {
+  const story = (n: number, overrides: Record<string, unknown> = {}) => ({
+    headline: `NVDA story ${n}`,
+    source: 'Reuters',
+    url: `https://news.example/nvda/${n}`,
+    publishedAt: Timestamp.now(),
+    ...overrides,
+  });
+  const newsJobs = () =>
+    [...svc.conn.db.workerJobs.iter()].filter(j => j.kind === 'stock_news' && JSON.parse(j.payload).ticker === 'NVDA');
+
+  test('a person can ask, repeats coalesce, and the job is never in their own jobs', async () => {
+    await rejectsWith(user.conn.reducers.requestStockNews({ ticker: 'SPY' }), 'unknown_ticker');
+    await rejectsWith(user.conn.reducers.requestStockNews({ ticker: 'NOPE' }), 'unknown_ticker');
+    await rejectsWith(svc.conn.reducers.requestStockNews({ ticker: 'NVDA' }), 'service_cannot_own_profile');
+    await user.conn.reducers.requestStockNews({ ticker: 'NVDA' });
+    await user.conn.reducers.requestStockNews({ ticker: 'NVDA' });
+    await rival.conn.reducers.requestStockNews({ ticker: 'NVDA' }).catch(() => undefined); // a service is refused
+    const jobs = await waitFor('one news job', () => (newsJobs().length > 0 ? newsJobs() : undefined));
+    assert.equal(jobs.length, 1);
+    assert.equal([...user.conn.db.myJobs.iter()].filter(j => j.kind === 'stock_news').length, 0);
+  });
+
+  test('only the leaseholder publishes, every story is validated, and the row reaches subscribers', async () => {
+    const queued = newsJobs()[0]!;
+    await svc.conn.reducers.claimJob({ jobId: queued.jobId, leaseSeconds: 60 });
+    const job = await waitFor('leased news job', () =>
+      [...svc.conn.db.workerJobs.iter()].find(j => j.jobId === queued.jobId && j.status === 'running')
+    );
+    const args = (overrides: Record<string, unknown> = {}) => ({
+      jobId: job.jobId,
+      attempt: job.attemptCount,
+      ticker: 'NVDA',
+      stories: [story(1), story(2)],
+      classification: 'classified',
+      classifierVersion: 'jev-news-v2:typesafe/jev-1.13',
+      ...overrides,
+    });
+    await rejectsWith(user.conn.reducers.publishStockNews(args()), 'not_authorized_service');
+    await rejectsWith(rival.conn.reducers.publishStockNews(args()), 'lease_mismatch');
+    for (const [overrides, code] of [
+      [{ ticker: 'AMD' }, 'ticker_mismatch'],
+      [{ stories: [story(1), story(2), story(3), story(4)] }, 'invalid_story_count'],
+      [{ stories: [story(1, { url: 'http://news.example/x' })] }, 'invalid_story'],
+      [{ stories: [story(1), story(2, { url: 'https://news.example/nvda/1' })] }, 'invalid_story'],
+      [{ stories: [story(1, { headline: ' ' })] }, 'invalid_story'],
+      [{ classification: 'great' }, 'invalid_news_classification'],
+    ] as const) {
+      await rejectsWith(svc.conn.reducers.publishStockNews(args(overrides)), code);
+    }
+    assert.equal([...user.conn.db.stockNews.iter()].length, 0);
+
+    await svc.conn.reducers.publishStockNews(args());
+    const row = await waitFor('news row', () => [...user.conn.db.stockNews.iter()].find(r => r.ticker === 'NVDA'));
+    assert.deepEqual(row.stories.map(s => s.url), ['https://news.example/nvda/1', 'https://news.example/nvda/2']);
+    assert.equal(row.classification, 'classified');
+    await waitFor('job done', () => (newsJobs().length === 0 ? true : undefined));
+
+    // A fresh result means asking again queues nothing.
+    await user.conn.reducers.requestStockNews({ ticker: 'NVDA' });
+    await new Promise(r => setTimeout(r, 150));
+    assert.equal(newsJobs().length, 0);
   });
 });

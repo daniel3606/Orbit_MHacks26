@@ -109,7 +109,7 @@ async def test_valid_decision_maps_every_classification_field():
     assert result.relevant and result.keep
     assert result.relevance_score == 0.94
     assert (result.event_type, result.sentiment, result.materiality) == ("earnings", "positive", "high")
-    assert result.classifier_version == "jev-news-v1:typesafe/jev-1.13"
+    assert result.classifier_version == "jev-news-v2:typesafe/jev-1.13"
     assert classifier.cost_usd == pytest.approx(0.00004)
 
     request = rec.requests[0]

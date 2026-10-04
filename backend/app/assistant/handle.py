@@ -32,6 +32,7 @@ from app.assistant.reply import build_packet, fallback_answer
 from app.assistant.select import Brief, select_brief
 from app.intelligence.features import news_signals
 from app.intelligence.service import Article, NewsClassificationService
+from app.intelligence.stories import CANDIDATES, SHOWN, best_stories
 from app.market.finnhub import FinnhubProvider
 from app.state.dto import JobV1
 from app.state.gateway import GatewayError, SpacetimeGateway
@@ -42,6 +43,8 @@ _TICKER = re.compile(r"^[A-Z][A-Z0-9.]{0,9}$")
 NEWS_WINDOW_DAYS = 7
 # Time Jev gets per reply, inside the 45 s lease that also covers news, state reads and OpenAI.
 NEWS_CLASSIFY_SECONDS = 6.0
+# The brief scans up to 6 companies, so it keeps the 3 newest headlines each (≤ 18 Jev calls in the time above).
+BRIEF_CANDIDATES = 3
 
 
 def _dec_micros(value: Any) -> Decimal:
@@ -361,8 +364,9 @@ class AssistantHandler:
     async def _attach_news(
         self, evidence: Evidence, tickers: list[str], job: JobV1, gateway: SpacetimeGateway
     ) -> None:
-        """Recent headlines with Jev's judgment. A story Jev did not keep for its company is left out;
-        when Jev is unavailable every story stays, unlabeled, with the reason recorded per company."""
+        """Up to 8 recent headlines per company (3 for the brief), judged by Jev; the best 3 it kept become evidence.
+        A story Jev did not keep is left out. Stories Jev could not judge stay unlabeled and only fill
+        empty places (all of them when Jev is unavailable, as before Jev), with the reason recorded."""
         if self._news is None or not tickers:
             evidence.news_checked = False
             return
@@ -374,7 +378,8 @@ class AssistantHandler:
         fetched: list[dict[str, str]] = []
         checked: list[str] = []
         for ticker in tickers:
-            items = await self._news.news_items(ticker, start, end, limit=3)
+            limit = CANDIDATES if self.kind == "answer_message" else BRIEF_CANDIDATES
+            items = await self._news.news_items(ticker, start, end, limit=limit)
             if items is None:
                 failed = True
                 continue
@@ -388,25 +393,24 @@ class AssistantHandler:
             [_article(item) for item in fetched], gateway=gateway, job=job, deadline=NEWS_CLASSIFY_SECONDS
         )
         now = datetime.now(UTC)
+        by_id = {item["id"]: item for item in fetched}
         for ticker in checked:
             own = judged.for_ticker(ticker)
             evidence.news_classification[ticker] = own.label()
             evidence.news_signals[ticker] = news_signals(own.items, now, window_hours=NEWS_WINDOW_DAYS * 24)
-        for item, verdict in zip(fetched, judged.items, strict=True):
-            classification = verdict.classification
-            if classification is not None and not classification.keep:
-                continue
-            evidence.news.append(
-                NewsFact(
-                    id=item["id"],
-                    ticker=item["ticker"],
-                    headline=item["headline"],
-                    url=item["url"],
-                    source=item["source"],
-                    published=item["published"],
-                    classification=classification,
+            for chosen in best_stories(own.items, now, limit=SHOWN, fill_unclassified=True):
+                item = by_id[chosen.article.article_id]
+                evidence.news.append(
+                    NewsFact(
+                        id=item["id"],
+                        ticker=item["ticker"],
+                        headline=item["headline"],
+                        url=item["url"],
+                        source=item["source"],
+                        published=item["published"],
+                        classification=chosen.classification,
+                    )
                 )
-            )
         evidence.news_failed = failed and not any(item.ticker in tickers for item in evidence.news)
 
 

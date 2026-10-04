@@ -447,6 +447,31 @@ export const newsClassification = table(
   }
 );
 
+export const StockNewsStory = t.object('StockNewsStory', {
+  headline: t.string(),
+  source: t.string(),
+  url: t.string(),
+  publishedAt: t.timestamp(),
+});
+
+/**
+ * Recent news for one ticker, as the worker last checked it: up to three Finnhub
+ * stories Jev kept as being about the company. Public, like quotes: news is
+ * shared, and the row holds no labels, scores or user data. Replaced as a whole.
+ */
+export const stockNews = table(
+  { name: 'stock_news', public: true },
+  {
+    ticker: t.string().primaryKey(),
+    stories: t.array(StockNewsStory),
+    // Jev coverage: 'classified', 'partial:<reason>', 'unavailable:<reason>', 'not_configured', 'no_articles'.
+    classification: t.string(),
+    classifierVersion: t.string(),
+    checkedAt: t.timestamp(),
+    jobId: t.u64(),
+  }
+);
+
 /** One explicit paper-account binding. Not created on connect. */
 export const paperBinding = table(
   { name: 'paper_binding' },
@@ -606,6 +631,7 @@ const spacetimedb = schema({
   dailyDiscovery,
   dailyDiscoveryItem,
   newsClassification,
+  stockNews,
   paperBinding,
   paperAccount,
   paperPosition,
