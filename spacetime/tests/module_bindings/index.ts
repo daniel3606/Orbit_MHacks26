@@ -52,7 +52,9 @@ import PublishDailyDiscoveryReducer from "./publish_daily_discovery_reducer";
 import PublishMarketSnapshotReducer from "./publish_market_snapshot_reducer";
 import PublishProviderCapabilitiesReducer from "./publish_provider_capabilities_reducer";
 import PublishRecommendationsReducer from "./publish_recommendations_reducer";
+import PublishStockNewsReducer from "./publish_stock_news_reducer";
 import RebindPaperDemoReducer from "./rebind_paper_demo_reducer";
+import RecordNewsClassificationsReducer from "./record_news_classifications_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RequestBackendCheckReducer from "./request_backend_check_reducer";
 import RequestDailyDiscoveryReducer from "./request_daily_discovery_reducer";
@@ -61,6 +63,7 @@ import RequestMarketIngestReducer from "./request_market_ingest_reducer";
 import RequestPaperReconcileReducer from "./request_paper_reconcile_reducer";
 import RequestPaperSyncReducer from "./request_paper_sync_reducer";
 import RequestRecommendationsReducer from "./request_recommendations_reducer";
+import RequestStockNewsReducer from "./request_stock_news_reducer";
 import RevokeServiceIdentityReducer from "./revoke_service_identity_reducer";
 import SetServiceFlagReducer from "./set_service_flag_reducer";
 import UpdatePreferencesReducer from "./update_preferences_reducer";
@@ -89,6 +92,7 @@ import MyRecommendationsRow from "./my_recommendations_table";
 import MyServiceGrantRow from "./my_service_grant_table";
 import ProviderCapabilityRow from "./provider_capability_table";
 import StockRow from "./stock_table";
+import StockNewsRow from "./stock_news_table";
 import TrendSignalRow from "./trend_signal_table";
 import WorkerAssistantMessagesRow from "./worker_assistant_messages_table";
 import WorkerAssistantPositionsRow from "./worker_assistant_positions_table";
@@ -98,6 +102,7 @@ import WorkerDiscoveryHistoryRow from "./worker_discovery_history_table";
 import WorkerDiscoveryItemsRow from "./worker_discovery_items_table";
 import WorkerJobProfilesRow from "./worker_job_profiles_table";
 import WorkerJobsRow from "./worker_jobs_table";
+import WorkerNewsClassificationsRow from "./worker_news_classifications_table";
 import WorkerPaperAccountRow from "./worker_paper_account_table";
 import WorkerPaperOrdersRow from "./worker_paper_orders_table";
 
@@ -152,6 +157,17 @@ const tablesSchema = __schema({
       { name: 'stock_ticker_key', constraint: 'unique', columns: ['ticker'] },
     ],
   }, StockRow),
+  stockNews: __table({
+    name: 'stock_news',
+    indexes: [
+      { accessor: 'ticker', name: 'stock_news_ticker_idx_btree', algorithm: 'btree', columns: [
+        'ticker',
+      ] },
+    ],
+    constraints: [
+      { name: 'stock_news_ticker_key', constraint: 'unique', columns: ['ticker'] },
+    ],
+  }, StockNewsRow),
   trendSignal: __table({
     name: 'trend_signal',
     indexes: [
@@ -331,6 +347,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, WorkerJobsRow),
+  workerNewsClassifications: __table({
+    name: 'worker_news_classifications',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerNewsClassificationsRow),
   workerPaperAccount: __table({
     name: 'worker_paper_account',
     indexes: [
@@ -367,7 +390,9 @@ const reducersSchema = __reducers(
   __reducerSchema("publish_market_snapshot", PublishMarketSnapshotReducer),
   __reducerSchema("publish_provider_capabilities", PublishProviderCapabilitiesReducer),
   __reducerSchema("publish_recommendations", PublishRecommendationsReducer),
+  __reducerSchema("publish_stock_news", PublishStockNewsReducer),
   __reducerSchema("rebind_paper_demo", RebindPaperDemoReducer),
+  __reducerSchema("record_news_classifications", RecordNewsClassificationsReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("request_backend_check", RequestBackendCheckReducer),
   __reducerSchema("request_daily_discovery", RequestDailyDiscoveryReducer),
@@ -376,6 +401,7 @@ const reducersSchema = __reducers(
   __reducerSchema("request_paper_reconcile", RequestPaperReconcileReducer),
   __reducerSchema("request_paper_sync", RequestPaperSyncReducer),
   __reducerSchema("request_recommendations", RequestRecommendationsReducer),
+  __reducerSchema("request_stock_news", RequestStockNewsReducer),
   __reducerSchema("revoke_service_identity", RevokeServiceIdentityReducer),
   __reducerSchema("set_service_flag", SetServiceFlagReducer),
   __reducerSchema("update_preferences", UpdatePreferencesReducer),

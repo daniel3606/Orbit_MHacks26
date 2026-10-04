@@ -16,6 +16,7 @@ from app.assistant.policy import (
     TREND_MEANING,
     BarPoint,
     Evidence,
+    NewsFact,
     QuoteFact,
     Source,
     money_text,
@@ -146,9 +147,16 @@ def build_packet(
                 "performance": {key: _num(value) for key, value in moves.items()},
                 "marketActivity": _activity(bars),
                 "news": [
-                    {"id": item.id, "source": item.source, "headline": item.headline, "published": item.published}
+                    {
+                        "id": item.id,
+                        "source": item.source,
+                        "headline": item.headline,
+                        "published": item.published,
+                        "labels": _labels(item),
+                    }
                     for item in news
                 ],
+                "newsClassification": _classification_json(evidence, ticker),
                 "catalystLevel": level,
                 "trendScore": _score_json(evidence, ticker),
                 "portfolioHeld": any(item.ticker == ticker and item.quantity > 0 for item in evidence.holdings),
@@ -179,6 +187,36 @@ def build_packet(
             "newsInputs": "News features are designed but current published scores use price and volume only.",
         }
     return packet, sources, level
+
+
+def _labels(item: NewsFact) -> dict[str, object] | None:
+    c = item.classification
+    if c is None:
+        return None
+    return {"eventType": c.event_type, "sentiment": c.sentiment, "materiality": c.materiality}
+
+
+def _classification_json(evidence: Evidence, ticker: str) -> dict[str, object]:
+    """Classifier coverage for this company's news, stated explicitly so missing labels are never read as neutral."""
+    label = evidence.news_classification.get(ticker)
+    if label is None:
+        return {"available": False, "reason": "news_not_checked"}
+    status, _, reason = label.partition(":")
+    out: dict[str, object] = {"available": status in ("classified", "partial"), "status": status}
+    if reason or status in ("not_configured", "no_articles"):
+        out["reason"] = reason or status
+    signals = evidence.news_signals.get(ticker)
+    if signals is not None and signals.relevant_events > 0:
+        out["newsSignals"] = {
+            "window": "7 days",
+            "classifiedStories": signals.classified,
+            "relevantStories": signals.relevant_events,
+            "independentSources": signals.independent_sources,
+            "sentimentBalance": signals.recent_sentiment,
+            "highestMateriality": signals.highest_materiality,
+            "note": "Weighted by relevance, recency and materiality; -1 all negative, 1 all positive.",
+        }
+    return out
 
 
 def fallback_answer(

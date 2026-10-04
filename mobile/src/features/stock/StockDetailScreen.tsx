@@ -2,14 +2,16 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { LayoutAnimation, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Path, Svg } from 'react-native-svg';
 
 import { exchangeLabel, formatMicros, formatShares, money, signedPct, stamp } from '@/features/market/format';
 import { RANGES, preferredRange, rangeSeries, type Range } from '@/features/market/series';
+import { requestStockNews } from '@/features/profile/actions';
 import { stockAnalysis } from '@/features/stock/cases';
+import { CHECK_TIMEOUT_MS, newsSection } from '@/features/stock/news';
 import { performanceReadout, type PerformanceReadout } from '@/features/stock/readout';
 import { useWatchlist } from '@/features/watchlist/store';
 import { labelFor, SECTORS } from '@/features/onboarding/options';
@@ -257,6 +259,30 @@ export default function StockDetailScreen() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [newsOpen, setNewsOpen] = useState(false);
+  // News is fetched and judged on the server; opening the screen only asks for it.
+  const [openedAt] = useState(() => Date.now());
+  const [newsAsked, setNewsAsked] = useState<{ symbol: string; at: number } | null>(null);
+  const [newsNow, setNewsNow] = useState(openedAt);
+  const live = rt.status === 'ready';
+  useEffect(() => {
+    if (!live || !symbol) return;
+    let cancelled = false;
+    const at = Date.now();
+    requestStockNews(symbol)
+      .catch(err => console.warn('[stock] news request failed', err))
+      .finally(() => {
+        if (cancelled) return;
+        setNewsAsked({ symbol, at });
+        setNewsNow(Date.now());
+      });
+    const timer = setTimeout(() => {
+      if (!cancelled) setNewsNow(Date.now());
+    }, CHECK_TIMEOUT_MS + 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [live, symbol]);
 
   const stock = rt.market.stocks.find(row => row.ticker === symbol);
   const quote = rt.market.quotes[symbol];
@@ -280,7 +306,9 @@ export default function StockDetailScreen() {
   });
 
   const available = (candidate: Range) => rangeSeries(candidate, closes, quote) !== null;
-  const news = discovered?.news ?? null;
+  const stockNews = rt.market.news[symbol] ?? null;
+  const newsView = newsSection(stockNews, newsAsked?.symbol === symbol ? newsAsked.at : openedAt, newsNow);
+  const news = stockNews?.stories[0] ?? discovered?.news ?? null;
   const longer = range === '1D' || range === '5D' || range === '1M' ? rangeSeries('6M', closes, quote) : null;
   const analysis = stockAnalysis({
     symbol,
@@ -506,21 +534,26 @@ export default function StockDetailScreen() {
             </Drawer>
 
             <Drawer title="News" open={newsOpen} onToggle={() => setNewsOpen(open => !open)}>
-              {news && /^https:\/\//i.test(news.url) ? (
-                <Pressable
-                  accessibilityRole="link"
-                  accessibilityLabel={`${news.source}. ${news.headline}. Opens the story.`}
-                  onPress={() => {
-                    void Linking.openURL(news.url);
-                  }}
-                  style={({ pressed }) => [pressed && styles.pressed]}>
-                  <Text style={styles.note}>{news.source || 'Story'}</Text>
-                  <Text style={styles.point}>{news.headline}</Text>
-                </Pressable>
+              {newsView.kind === 'stories' ? (
+                <View style={styles.newsList}>
+                  {newsView.stories.map(story => (
+                    <Pressable
+                      key={story.url}
+                      accessibilityRole="link"
+                      accessibilityLabel={story.label}
+                      onPress={() => {
+                        void Linking.openURL(story.url);
+                      }}
+                      style={({ pressed }) => [styles.newsItem, pressed && styles.pressed]}>
+                      <Text style={styles.point} numberOfLines={3}>
+                        {story.headline}
+                      </Text>
+                      <Text style={styles.note}>{story.meta}</Text>
+                    </Pressable>
+                  ))}
+                </View>
               ) : (
-                <Text style={styles.point}>
-                  No story is stored for {symbol}. Discover keeps one recent headline for the companies it shows that day.
-                </Text>
+                <Text style={styles.point}>{newsView.message}</Text>
               )}
             </Drawer>
 
@@ -563,6 +596,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   fill: { flex: 1 },
   pressed: { opacity: 0.7 },
+  newsList: { gap: space.md },
+  newsItem: { gap: 2, minHeight: HIT },
   nav: {
     height: HIT + space.sm,
     flexDirection: 'row',

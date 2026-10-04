@@ -91,6 +91,7 @@ function item(ticker: string, rank: number, overrides: Record<string, unknown> =
     newsSource: undefined,
     newsUrl: undefined,
     newsPublishedAt: undefined,
+    newsClassification: 'not_configured',
     ...overrides,
   };
 }
@@ -214,11 +215,21 @@ describe('daily discovery', () => {
       ),
       'invalid_news'
     );
+    await rejectsWith(
+      svc.conn.reducers.publishDailyDiscovery(
+        publishArgs(job, today, [item('NVDA', 1, { newsClassification: 'unavailable:Not A Code' })])
+      ),
+      'invalid_news_classification'
+    );
     assert.equal([...user.conn.db.myDailyDiscovery.iter()].length, 0);
     assert.equal([...user.conn.db.myDiscoveryItems.iter()].length, 0);
 
     await svc.conn.reducers.publishDailyDiscovery(
-      publishArgs(job, today, [item('NVDA', 1), item('AMD', 2, { angle: 'AI chips' }), item('AVGO', 3, { angle: 'AI networking' })])
+      publishArgs(job, today, [
+        item('NVDA', 1, { newsClassification: 'classified' }),
+        item('AMD', 2, { angle: 'AI chips', newsClassification: 'unavailable:auth_failed' }),
+        item('AVGO', 3, { angle: 'AI networking', newsClassification: 'partial:rate_limited' }),
+      ])
     );
     const set = await waitFor('published set', () => [...user.conn.db.myDailyDiscovery.iter()][0]);
     assert.equal(set.discoveryDate, today);
@@ -228,6 +239,10 @@ describe('daily discovery', () => {
       return rows.length === 3 ? rows : undefined;
     });
     assert.deepEqual(items.map(i => i.ticker).sort(), ['AMD', 'AVGO', 'NVDA']);
+    assert.deepEqual(
+      Object.fromEntries(items.map(i => [i.ticker, i.newsClassification])),
+      { NVDA: 'classified', AMD: 'unavailable:auth_failed', AVGO: 'partial:rate_limited' }
+    );
     const done = await waitFor('job done', () =>
       [...user.conn.db.myJobs.iter()].find(j => j.jobId === job.jobId && j.status === 'succeeded')
     );

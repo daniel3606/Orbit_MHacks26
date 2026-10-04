@@ -491,3 +491,100 @@ def test_first_backfills_stay_inside_one_publish_budget() -> None:
     admitted, held = admit_history(tickers, fetched, {"OLD"}, budget=650)
     assert {b.ticker for b in admitted} == {"OLD", "NEW1", "NEW2"}  # known history always passes
     assert held == {"NEW3": "history_backfill_pending", "DOWN": "history_unavailable:provider_unavailable"}
+
+
+# ---- Jev classification: headline choice only, never a score ----
+
+from app.intelligence.classifier import Classification, ClassificationUnavailable  # noqa: E402
+from app.intelligence.service import NewsClassificationService  # noqa: E402
+
+KEPT = Classification(True, 0.95, "product", "positive", "medium", True, "jev-news-v1:test")
+NOT_ABOUT_IT = Classification(True, 0.7, "other", "neutral", "low", False, "jev-news-v1:test")
+
+
+class TwoStoryNews(FakeNews):
+    """Two headlines that both name the company; the newer one is opinion, the older a real development."""
+
+    async def news_items(self, ticker: str, start: date, end: date, limit: int = 3) -> list[dict[str, str]] | None:
+        self.calls.append(ticker)
+        name = THEMES.companies[ticker].names[0]
+        return [
+            {"id": f"news:{ticker}:2", "headline": f"Is {name} a buy right now?", "url": "https://news.example/opinion", "source": "Blog", "published": (NOW - timedelta(hours=1)).isoformat(), "summary": ""},
+            {"id": f"news:{ticker}:1", "headline": f"{name} opens a new plant", "url": "https://news.example/plant", "source": "Wire", "published": (NOW - timedelta(hours=3)).isoformat(), "summary": "Construction finished."},
+        ]
+
+
+class JudgingClassifier:
+    version = "jev-news-v1:test"
+
+    def __init__(self, fail: str | None = None):
+        self.fail = fail
+        self.calls = 0
+
+    async def available(self) -> bool:
+        return self.fail is None
+
+    async def classify_article(self, *, article_id, ticker, headline, text, source, published_at):
+        self.calls += 1
+        if self.fail:
+            raise ClassificationUnavailable(self.fail)  # type: ignore[arg-type]
+        return NOT_ABOUT_IT if "a buy" in headline else KEPT
+
+
+class StoringGateway(FakeGateway):
+    def __init__(self) -> None:
+        super().__init__()
+        self.recorded: list[tuple[int, int, list[dict[str, Any]]]] = []
+        self.capabilities: list[Any] = []
+
+    async def worker_news_classifications(self) -> list[Any]:
+        return []
+
+    async def record_news_classifications(self, job_id: int, attempt: int, rows: list[dict[str, Any]]) -> None:
+        self.recorded.append((job_id, attempt, rows))
+
+    async def publish_provider_capabilities(self, capabilities: list[dict[str, Any]]) -> None:
+        self.capabilities.append(capabilities)
+
+
+SCORE_FIELDS = ("ticker", "rank", "score", "trend_score", "fit_score", "news_score", "momentum_score", "novelty_score", "news_count", "reasons")
+
+
+async def _publish(classifier: JudgingClassifier | None) -> tuple[list[dict[str, Any]], StoringGateway]:
+    gateway = StoringGateway()
+    service = NewsClassificationService(classifier)  # type: ignore[arg-type]
+    handler = DailyDiscoveryHandler(TwoStoryNews(), THEMES, classification=service, clock=lambda: NOW)
+    await handler.run(_job({"date": "2026-10-04", "zodiac": "aquarius"}), gateway)  # type: ignore[arg-type]
+    return gateway.published[0][14], gateway
+
+
+async def test_classification_changes_the_headline_but_never_a_score():
+    without, _ = await _publish(None)
+    with_jev, gateway = await _publish(JudgingClassifier())
+    assert [{k: i[k] for k in SCORE_FIELDS} for i in with_jev] == [{k: i[k] for k in SCORE_FIELDS} for i in without]
+    for before, after in zip(without, with_jev, strict=True):
+        assert "a buy" in before["news_headline"]["some"]  # pre-Jev rule: newest story naming the company
+        assert after["news_headline"]["some"].endswith("opens a new plant")  # Jev kept the real development
+        assert before["news_classification"] == "not_configured"
+        assert after["news_classification"] == "classified"
+    ((job_id, attempt, rows),) = gateway.recorded
+    assert (job_id, attempt) == (7, 1) and len(rows) == 2 * len(with_jev)
+
+
+async def test_jev_outage_keeps_the_pre_jev_headline_and_says_why():
+    without, _ = await _publish(None)
+    failed, gateway = await _publish(JudgingClassifier(fail="provider_unavailable"))
+    assert [{k: i[k] for k in SCORE_FIELDS} for i in failed] == [{k: i[k] for k in SCORE_FIELDS} for i in without]
+    assert [i["news_headline"] for i in failed] == [i["news_headline"] for i in without]
+    assert {i["news_classification"] for i in failed} == {"unavailable:provider_unavailable"}
+    assert gateway.recorded == []
+
+
+async def test_no_kept_story_means_no_headline_rather_than_an_off_topic_one():
+    class NothingKept(JudgingClassifier):
+        async def classify_article(self, **kw: Any) -> Classification:
+            return NOT_ABOUT_IT
+
+    items, _ = await _publish(NothingKept())
+    assert all(i["news_headline"] == {"none": []} for i in items)
+    assert all(i["news_count"] == 2 for i in items)  # the count still reports stories that named the company

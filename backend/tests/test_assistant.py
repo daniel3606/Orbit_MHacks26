@@ -940,3 +940,208 @@ async def test_chat_follow_ups_use_server_context_after_an_education_detour(capl
         assert route is not None
         routes.append((route.group(1), route.group(4)))
     assert routes == [("research", "NVDA"), ("education", ""), ("prediction", "NVDA"), ("recommendation", "NVDA")]
+
+
+# ---- Jev labels in the assistant: OpenAI explains, Jev classifies ----
+
+from app.assistant.facts import catalyst_level  # noqa: E402
+from app.assistant.policy import BRIEF_INSTRUCTIONS, INSTRUCTIONS  # noqa: E402
+from app.intelligence.classifier import Classification, ClassificationUnavailable  # noqa: E402
+from app.intelligence.service import NewsClassificationService  # noqa: E402
+
+_EARN = Classification(True, 0.96, "earnings", "positive", "high", True, "jev-news-v1:test")
+_LEGAL = Classification(True, 0.9, "legal", "negative", "high", True, "jev-news-v1:test")
+_OFF_TOPIC = Classification(False, 0.1, "other", "neutral", "low", False, "jev-news-v1:test")
+
+
+class _LabeledNews:
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def news_items(self, ticker, _start, _end, limit=3):
+        self.asked.append(ticker)
+        return [
+            {"id": f"news:{ticker}:3", "ticker": ticker, "headline": "Nvidia's quarter tops forecasts", "url": "https://example.test/q", "source": "Reuters", "published": "2026-10-02T21:00:00+00:00", "summary": "Revenue rose."},
+            {"id": f"news:{ticker}:2", "ticker": ticker, "headline": "Nvidia sued over chip patents", "url": "https://example.test/s", "source": "Bloomberg", "published": "2026-10-02T15:00:00+00:00", "summary": ""},
+            {"id": f"news:{ticker}:1", "ticker": ticker, "headline": "Ten AI stocks with earnings next month", "url": "https://example.test/l", "source": "Blog", "published": "2026-10-02T12:00:00+00:00", "summary": ""},
+        ]
+
+
+class _Labeler:
+    version = "jev-news-v1:test"
+
+    def __init__(self, fail: str | None = None) -> None:
+        self.fail = fail
+        self.calls = 0
+
+    async def available(self) -> bool:
+        return self.fail is None
+
+    async def classify_article(self, *, article_id, ticker, headline, text, source, published_at):
+        self.calls += 1
+        if self.fail:
+            raise ClassificationUnavailable(self.fail)  # type: ignore[arg-type]
+        if "Ten AI stocks" in headline:
+            return _OFF_TOPIC
+        return _LEGAL if "sued" in headline else _EARN
+
+
+class _ClassifyingChat(_Chat):
+    def __init__(self, evidence: Evidence):
+        super().__init__(evidence)
+        self.recorded: list[object] = []
+        self.capabilities: list[object] = []
+
+    async def worker_news_classifications(self):
+        return []
+
+    async def record_news_classifications(self, job_id, attempt, rows):
+        self.recorded.append(rows)
+
+    async def publish_provider_capabilities(self, capabilities):
+        self.capabilities.append(capabilities)
+
+
+def _handler_with(service: NewsClassificationService, kind: str = "answer_message") -> AssistantHandler:
+    return AssistantHandler(kind=kind, api_key=None, model="m", timeout=1, max_output_tokens=100, news=_LabeledNews(), classification=service)  # type: ignore[arg-type]
+
+
+async def _evidence_after(service: NewsClassificationService) -> Evidence:
+    evidence = routing_evidence()
+    chat = _ClassifyingChat(evidence)
+    handler = _handler_with(service)
+    job = SimpleNamespace(job_id=1, attempt_count=1, owner=chat.owner, payload="{}")
+    await handler._attach_news(evidence, ["NVDA"], job, chat)  # type: ignore[arg-type]
+    return evidence
+
+
+@pytest.mark.asyncio
+async def test_off_topic_story_is_dropped_and_kept_stories_carry_labels():
+    evidence = await _evidence_after(NewsClassificationService(_Labeler()))  # type: ignore[arg-type]
+    headlines = [item.headline for item in evidence.news_for("NVDA")]
+    assert headlines == ["Nvidia's quarter tops forecasts", "Nvidia sued over chip patents"]
+    assert evidence.news_classification["NVDA"] == "classified"
+    packet, _, level = build_packet(evidence, ["NVDA"], intent="movement", include_definition=False)
+    entity = packet["entities"][0]  # type: ignore[index]
+    assert [item["labels"] for item in entity["news"]] == [
+        {"eventType": "earnings", "sentiment": "positive", "materiality": "high"},
+        {"eventType": "legal", "sentiment": "negative", "materiality": "high"},
+    ]
+    coverage = entity["newsClassification"]
+    assert coverage["available"] is True and coverage["status"] == "classified"
+    assert coverage["newsSignals"]["relevantStories"] == 2 and coverage["newsSignals"]["independentSources"] == 2
+    assert level == 1  # Jev labeled the quarter as earnings, though the headline never says "earnings"
+
+
+@pytest.mark.asyncio
+async def test_unavailable_classification_is_explicit_and_never_neutral():
+    evidence = await _evidence_after(NewsClassificationService(_Labeler(fail="auth_failed")))  # type: ignore[arg-type]
+    assert len(evidence.news_for("NVDA")) == 3  # nothing filtered without a judgment
+    packet, _, _ = build_packet(evidence, ["NVDA"], intent="research", include_definition=False)
+    entity = packet["entities"][0]  # type: ignore[index]
+    assert all(item["labels"] is None for item in entity["news"])
+    assert entity["newsClassification"] == {"available": False, "status": "unavailable", "reason": "auth_failed"}
+    assert "neutral" not in json.dumps(entity)
+
+
+@pytest.mark.asyncio
+async def test_without_a_key_the_packet_says_not_configured():
+    evidence = await _evidence_after(NewsClassificationService(None))
+    packet, _, _ = build_packet(evidence, ["NVDA"], intent="research", include_definition=False)
+    assert packet["entities"][0]["newsClassification"] == {  # type: ignore[index]
+        "available": False,
+        "status": "not_configured",
+        "reason": "not_configured",
+    }
+
+
+def test_catalyst_uses_jev_event_type_and_ignores_stories_it_did_not_keep():
+    as_of = "2026-10-02T20:00:00+00:00"
+    listicle = NewsFact("n1", "NVDA", "Ten AI stocks with earnings next month", "https://x.test/1", "Blog", "2026-10-02T12:00:00+00:00")
+    assert catalyst_level([listicle], as_of) == 1  # headline pattern alone, before Jev
+    assert catalyst_level([replace_classification(listicle, _OFF_TOPIC)], as_of) == 4  # Jev: not about NVDA
+    plain = NewsFact("n2", "NVDA", "Nvidia's quarter tops forecasts", "https://x.test/2", "Reuters", "2026-10-02T21:00:00+00:00")
+    assert catalyst_level([plain], as_of) == 2
+    assert catalyst_level([replace_classification(plain, _EARN)], as_of) == 1
+
+
+def replace_classification(item: NewsFact, classification: Classification) -> NewsFact:
+    from dataclasses import replace
+
+    return replace(item, classification=classification)
+
+
+@pytest.mark.asyncio
+async def test_brief_and_chat_reuse_one_classification_per_story():
+    labeler = _Labeler()
+    service = NewsClassificationService(labeler)  # type: ignore[arg-type]
+    evidence = routing_evidence()
+    chat = _ClassifyingChat(evidence)
+    job = SimpleNamespace(job_id=1, attempt_count=1, owner=chat.owner, payload="{}")
+    await _handler_with(service, "home_brief")._attach_news(Evidence(stocks=evidence.stocks), ["NVDA"], job, chat)  # type: ignore[arg-type]
+    await _handler_with(service)._attach_news(Evidence(stocks=evidence.stocks), ["NVDA"], job, chat)  # type: ignore[arg-type]
+    assert labeler.calls == 3  # three stories, judged once across both consumers
+    assert len(chat.recorded) == 1
+
+
+def test_prompts_keep_classification_with_jev():
+    assert "come from Orbit's news classifier" in INSTRUCTIONS
+    assert "do not relabel stories yourself" in INSTRUCTIONS
+    assert "not a forecast of the stock" in INSTRUCTIONS
+    assert "Without labels, do not describe its tone" in BRIEF_INSTRUCTIONS
+
+
+class _EightStories:
+    def __init__(self) -> None:
+        self.limits: list[int] = []
+
+    async def news_items(self, ticker, _start, _end, limit=3):
+        self.limits.append(limit)
+        rows = [
+            ("Ten AI stocks to buy now", "Blog"),
+            ("Nvidia's quarter tops forecasts", "Reuters"),
+            ("Micron vs. Qualcomm: revenue trends", "Yahoo"),
+            ("Nvidia sued over chip patents", "Bloomberg"),
+            ("How a student built a #1 app", "Yahoo"),
+            ("Nvidia names a new CFO", "WSJ"),
+            ("Nvidia opens a Tokyo research lab", "Nikkei"),
+            ("Market movers this afternoon", "ChartMill"),
+        ]
+        return [
+            {"id": f"news:{ticker}:{i}", "ticker": ticker, "headline": h, "url": f"https://example.test/{i}", "source": s, "published": f"2026-10-02T{20 - i:02d}:00:00+00:00", "summary": ""}
+            for i, (h, s) in enumerate(rows)
+        ][:limit]
+
+
+class _NvidiaOnly(_Labeler):
+    async def classify_article(self, *, article_id, ticker, headline, text, source, published_at):
+        self.calls += 1
+        if not headline.startswith("Nvidia"):
+            return _OFF_TOPIC
+        return _LEGAL if "sued" in headline else _EARN
+
+
+@pytest.mark.asyncio
+async def test_chat_reads_eight_candidates_and_cites_at_most_the_best_three():
+    evidence = routing_evidence()
+    chat = _ClassifyingChat(evidence)
+    news = _EightStories()
+    labeler = _NvidiaOnly()
+    handler = AssistantHandler(kind="answer_message", api_key=None, model="m", timeout=1, max_output_tokens=100, news=news, classification=NewsClassificationService(labeler))  # type: ignore[arg-type]
+    job = SimpleNamespace(job_id=1, attempt_count=1, owner=chat.owner, payload="{}")
+    await handler._attach_news(evidence, ["NVDA"], job, chat)  # type: ignore[arg-type]
+    assert news.limits == [8] and labeler.calls == 8
+    kept = evidence.news_for("NVDA")
+    assert len(kept) == 3 and all(item.headline.startswith("Nvidia") for item in kept)
+    assert evidence.news_signals["NVDA"].relevant_events == 4  # all four judged; only the best three are cited
+
+
+@pytest.mark.asyncio
+async def test_the_brief_keeps_three_candidates_per_company():
+    evidence = routing_evidence()
+    chat = _ClassifyingChat(evidence)
+    news = _EightStories()
+    brief = AssistantHandler(kind="home_brief", api_key=None, model="m", timeout=1, max_output_tokens=100, news=news, classification=NewsClassificationService(_NvidiaOnly()))  # type: ignore[arg-type]
+    job = SimpleNamespace(job_id=1, attempt_count=1, owner=chat.owner, payload="{}")
+    await brief._attach_news(evidence, ["NVDA", "AAPL"], job, chat)  # type: ignore[arg-type]
+    assert news.limits == [3, 3]

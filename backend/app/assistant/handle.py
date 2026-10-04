@@ -30,6 +30,9 @@ from app.assistant.policy import (
 )
 from app.assistant.reply import build_packet, fallback_answer
 from app.assistant.select import Brief, select_brief
+from app.intelligence.features import news_signals
+from app.intelligence.service import Article, NewsClassificationService
+from app.intelligence.stories import CANDIDATES, SHOWN, best_stories
 from app.market.finnhub import FinnhubProvider
 from app.state.dto import JobV1
 from app.state.gateway import GatewayError, SpacetimeGateway
@@ -37,6 +40,11 @@ from app.workers.runner import Committed, JobFailure
 
 log = logging.getLogger(__name__)
 _TICKER = re.compile(r"^[A-Z][A-Z0-9.]{0,9}$")
+NEWS_WINDOW_DAYS = 7
+# Time Jev gets per reply, inside the 45 s lease that also covers news, state reads and OpenAI.
+NEWS_CLASSIFY_SECONDS = 6.0
+# The brief scans up to 6 companies, so it keeps the 3 newest headlines each (≤ 18 Jev calls in the time above).
+BRIEF_CANDIDATES = 3
 
 
 def _dec_micros(value: Any) -> Decimal:
@@ -61,6 +69,7 @@ class AssistantHandler:
         timeout: float,
         max_output_tokens: int,
         news: FinnhubProvider | None,
+        classification: NewsClassificationService | None = None,
     ):
         self.kind = kind
         self._api_key = api_key
@@ -68,6 +77,7 @@ class AssistantHandler:
         self._timeout = timeout
         self._max_output_tokens = max_output_tokens
         self._news = news
+        self._classification = classification or NewsClassificationService(None)
 
     async def run(self, job: JobV1, gateway: SpacetimeGateway) -> Committed:
         payload = json.loads(job.payload or "{}")
@@ -82,7 +92,7 @@ class AssistantHandler:
         return Committed(result_ref=f"assistant:{reply_key}"[:120])
 
     async def _brief(self, job: JobV1, gateway: SpacetimeGateway, reply_key: str, evidence: Evidence) -> None:
-        await self._attach_news(evidence, _brief_candidates(evidence))
+        await self._attach_news(evidence, _brief_candidates(evidence), job, gateway)
         brief = select_brief(evidence)
         citations = json.dumps([{"id": source.id, "as_of": source.as_of} for source in brief.sources])
         try:
@@ -146,10 +156,11 @@ class AssistantHandler:
                 llm = exc.code
                 log.warning("assistant model %s retryable=%s", exc.code, exc.retryable)
         log.info(
-            "assistant kind=home_brief intent=%s symbols=%s news=%s market_open=%s llm=%s fallback=%s",
+            "assistant kind=home_brief intent=%s symbols=%s news=%s classification=%s market_open=%s llm=%s fallback=%s",
             brief.reason_type,
             brief.ticker or "",
             "failed" if evidence.news_failed else "ok" if evidence.news_checked else "skipped",
+            evidence.news_classification.get(brief.ticker or "", "none"),
             evidence.market_open,
             llm,
             fallback,
@@ -175,7 +186,7 @@ class AssistantHandler:
         resolution = resolve(user_text, evidence, evidence.active_ticker)
         tickers = list(resolution.tickers)
         if resolution.intent not in {"education", "refusal", "redirect"} and tickers:
-            await self._attach_news(evidence, tickers)
+            await self._attach_news(evidence, tickers, job, gateway)
         text, citations, follow, practice = fallback_answer(
             resolution.intent,
             tickers,
@@ -248,12 +259,14 @@ class AssistantHandler:
         if practice and (len(tickers) != 1 or not _TICKER.match(tickers[0])):
             practice = None
         log.info(
-            "assistant kind=answer_message intent=%s lookup=%s context=%s symbols=%s news=%s market_open=%s llm=%s fallback=%s",
+            "assistant kind=answer_message intent=%s lookup=%s context=%s symbols=%s news=%s classification=%s "
+            "market_open=%s llm=%s fallback=%s",
             resolution.intent,
             resolution.looked_up,
             resolution.used_context,
             ",".join(tickers),
             "failed" if evidence.news_failed else "ok" if evidence.news_checked else "skipped",
+            ",".join(f"{t}:{evidence.news_classification[t]}" for t in tickers if t in evidence.news_classification) or "none",
             evidence.market_open,
             llm,
             fallback,
@@ -348,24 +361,45 @@ class AssistantHandler:
             ]
         return evidence, history, user_text
 
-    async def _attach_news(self, evidence: Evidence, tickers: list[str]) -> None:
+    async def _attach_news(
+        self, evidence: Evidence, tickers: list[str], job: JobV1, gateway: SpacetimeGateway
+    ) -> None:
+        """Up to 8 recent headlines per company (3 for the brief), judged by Jev; the best 3 it kept become evidence.
+        A story Jev did not keep is left out. Stories Jev could not judge stay unlabeled and only fill
+        empty places (all of them when Jev is unavailable, as before Jev), with the reason recorded."""
         if self._news is None or not tickers:
             evidence.news_checked = False
             return
         evidence.news_checked = True
         end = datetime.now(UTC).date()
-        start = end - timedelta(days=7)
+        start = end - timedelta(days=NEWS_WINDOW_DAYS)
         failed = False
         seen = {item.id for item in evidence.news}
+        fetched: list[dict[str, str]] = []
+        checked: list[str] = []
         for ticker in tickers:
-            items = await self._news.news_items(ticker, start, end, limit=3)
+            limit = CANDIDATES if self.kind == "answer_message" else BRIEF_CANDIDATES
+            items = await self._news.news_items(ticker, start, end, limit=limit)
             if items is None:
                 failed = True
                 continue
+            checked.append(ticker)
             for item in items:
                 if item["id"] in seen:
                     continue
                 seen.add(item["id"])
+                fetched.append(item)
+        judged = await self._classification.classify(
+            [_article(item) for item in fetched], gateway=gateway, job=job, deadline=NEWS_CLASSIFY_SECONDS
+        )
+        now = datetime.now(UTC)
+        by_id = {item["id"]: item for item in fetched}
+        for ticker in checked:
+            own = judged.for_ticker(ticker)
+            evidence.news_classification[ticker] = own.label()
+            evidence.news_signals[ticker] = news_signals(own.items, now, window_hours=NEWS_WINDOW_DAYS * 24)
+            for chosen in best_stories(own.items, now, limit=SHOWN, fill_unclassified=True):
+                item = by_id[chosen.article.article_id]
                 evidence.news.append(
                     NewsFact(
                         id=item["id"],
@@ -374,9 +408,21 @@ class AssistantHandler:
                         url=item["url"],
                         source=item["source"],
                         published=item["published"],
+                        classification=chosen.classification,
                     )
                 )
         evidence.news_failed = failed and not any(item.ticker in tickers for item in evidence.news)
+
+
+def _article(item: dict[str, str]) -> Article:
+    return Article(
+        article_id=item["id"],
+        ticker=item["ticker"],
+        headline=item["headline"],
+        text=item.get("summary") or None,
+        source=item["source"],
+        published_at=datetime.fromisoformat(item["published"]),
+    )
 
 
 def _as_of(evidence: Evidence, tickers: list[str]) -> str | None:
@@ -459,6 +505,7 @@ def handlers(
     timeout: float,
     max_output_tokens: int,
     news: FinnhubProvider | None,
+    classification: NewsClassificationService | None = None,
 ) -> dict[str, AssistantHandler]:
     answer = AssistantHandler(
         kind="answer_message",
@@ -467,6 +514,7 @@ def handlers(
         timeout=timeout,
         max_output_tokens=max_output_tokens,
         news=news,
+        classification=classification,
     )
     brief = AssistantHandler(
         kind="home_brief",
@@ -475,6 +523,7 @@ def handlers(
         timeout=timeout,
         max_output_tokens=max_output_tokens,
         news=news,
+        classification=classification,
     )
     return {answer.kind: answer, brief.kind: brief}
 

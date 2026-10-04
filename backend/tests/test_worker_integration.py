@@ -120,3 +120,54 @@ async def test_consumer_cannot_use_service_paths(actors):
     with pytest.raises(ReducerRejected) as info:
         await user.call_reducer("grant_service_identity", [[f"0x{user_id}"], "me"])
     assert info.value.code == "not_authorized_admin"
+
+
+async def test_classifications_round_trip_through_the_real_module(actors):
+    """Jev judgments (fake classifier) are stored under the Discovery job's lease, read back
+    through the service view into the strict DTO, and reused by a fresh process."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.intelligence.classifier import Classification
+    from app.intelligence.service import Article, NewsClassificationService
+
+    class Fake:
+        version = "jev-news-v1:integration"
+        calls = 0
+
+        async def available(self) -> bool:
+            return True
+
+        async def classify_article(self, **_kw):
+            Fake.calls += 1
+            return Classification(True, 0.91, "legal", "negative", "high", True, self.version)
+
+    _svc_id, svc, user_id, user = actors
+    await svc.upsert_stocks([
+        {"ticker": "SPY", "name": "Benchmark", "exchange": "", "industry": "ETF", "sector": "", "currency": "USD", "kind": "benchmark", "benchmark": "", "display_order": 0, "logo_url": ""},
+        {"ticker": "NVDA", "name": "NVIDIA", "exchange": "TEST", "industry": "Chips", "sector": "technology", "currency": "USD", "kind": "equity", "benchmark": "SPY", "display_order": 1, "logo_url": ""},
+    ])
+    await user.call_reducer("complete_onboarding", [*PREFS, NONE])
+    local_day = (datetime.now(UTC) - timedelta(hours=12)).date().isoformat()
+    await user.call_reducer("request_daily_discovery", [local_day])
+    await svc.register_worker(["daily_discovery"])
+    mine = lambda j: j.owner.removeprefix("0x").lower() == user_id.removeprefix("0x").lower()  # noqa: E731
+    (job,) = [j for j in await svc.worker_jobs() if j.kind == "daily_discovery" and j.status == "queued" and mine(j)]
+    await svc.claim_job(job.job_id, 60)
+    (leased,) = [j for j in await svc.worker_jobs() if j.job_id == job.job_id]
+
+    headline = f"Nvidia sued over chip patents {uuid.uuid4().hex[:8]}"
+    article = Article("news:NVDA:it", "NVDA", headline, "A lawsuit was filed.", "Wire", datetime.now(UTC) - timedelta(hours=2))
+    first = await NewsClassificationService(Fake()).classify([article], gateway=svc, job=leased)
+    assert first.status == "classified" and Fake.calls == 1
+
+    stored = [row for row in await svc.worker_news_classifications() if row.article_id == "news:NVDA:it" and row.classifier_version == Fake.version]
+    assert stored and stored[-1].sentiment == "negative" and stored[-1].job_id == job.job_id
+    assert await user.worker_news_classifications() == []  # consumers never see the rows
+
+    again = await NewsClassificationService(Fake()).classify([article], gateway=svc, job=leased)  # a restarted worker
+    assert again.status == "classified" and Fake.calls == 1  # served from the stored row
+
+    await NewsClassificationService(None).publish_capability(svc)  # what a worker without JEV_API_KEY reports
+    row = {c.key: c for c in await svc.provider_capabilities()}["jev.news_classification"]
+    assert row.provider == "jev" and not row.available and "JEV_API_KEY" in row.detail
+    await svc.fail_job(leased.job_id, leased.attempt_count, "test_done", False)

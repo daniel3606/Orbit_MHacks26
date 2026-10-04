@@ -54,8 +54,8 @@ test-spacetime: check-node ## Republish orbit-test (wiped) and run realtime inte
 test-backend: ## Backend unit + integration tests (integration needs orbit-test)
 	cd backend && uv run pytest -q
 
-test-live: ## Opt-in live Finnhub and Alpaca checks (uses backend keys; costs API calls)
-	cd backend && ORBIT_LIVE_PROVIDER_TESTS=1 uv run pytest -q -s tests/test_finnhub_live.py tests/test_alpaca_live.py
+test-live: ## Opt-in live Finnhub, Alpaca and Jev checks (uses backend keys; costs API calls)
+	cd backend && ORBIT_LIVE_PROVIDER_TESTS=1 uv run pytest -q -s tests/test_finnhub_live.py tests/test_alpaca_live.py tests/test_jev_live.py
 
 ingest-now: ## Ask the worker to run market ingestion now (admin CLI identity)
 	spacetime call --no-config $(DB) --server local request_market_ingest

@@ -21,6 +21,7 @@ export const JOB_KIND = {
   answerMessage: 'answer_message',
   homeBrief: 'home_brief',
   dailyDiscovery: 'daily_discovery',
+  stockNews: 'stock_news',
 } as const;
 
 const KNOWN_JOB_KINDS: readonly string[] = Object.values(JOB_KIND);

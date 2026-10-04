@@ -17,6 +17,8 @@ ALPACA_PAPER_URL = "https://paper-api.alpaca.markets"
 # Market-data host only. Never a trading host: historical bars must not be
 # able to submit or enable live orders (PRD §17, §24).
 ALPACA_DATA_URL = "https://data.alpaca.markets"
+# Jev (TypeSafe) is served through OpenRouter's Decisions API, the only contract verified so far.
+JEV_OPENROUTER_URL = "https://openrouter.ai/api"
 
 
 class Settings(BaseSettings):
@@ -55,9 +57,17 @@ class Settings(BaseSettings):
     finnhub_max_retries: int = Field(default=3, ge=0, le=6)
     market_ingest_enabled: bool = True
 
-    # Providers for later phases (validated when present).
+    # Jev news classification through OpenRouter (an OpenRouter API key). Backend only.
+    # Docs: https://openrouter.ai/docs/guides/community/jev
     jev_api_key: SecretStr | None = None
-    jev_base_url: AnyHttpUrl | None = None
+    jev_base_url: AnyHttpUrl = AnyHttpUrl(JEV_OPENROUTER_URL)
+    # Pinned so thresholds tuned against one release stay stable (`~typesafe/jev-latest` floats).
+    jev_model: str = Field(default="typesafe/jev-1.13", pattern=r"^~?[a-z0-9-]+/[a-z0-9.-]{1,40}$")
+    jev_timeout_seconds: float = Field(default=8.0, gt=1, le=30)
+    # OpenRouter publishes no per-minute cap for paid models; this is our own ceiling.
+    jev_calls_per_minute: int = Field(default=120, ge=1, le=1200)
+    jev_burst: int = Field(default=10, ge=1, le=50)
+    jev_max_retries: int = Field(default=2, ge=0, le=4)
     openai_api_key: SecretStr | None = None
     # Responses API model. Override without a code change. Docs: https://developers.openai.com/api/reference/resources/responses/methods/create/
     openai_model: str = Field(default="gpt-4.1-mini", pattern=r"^[A-Za-z0-9._-]{1,64}$")
@@ -88,6 +98,14 @@ class Settings(BaseSettings):
         # Reject trading hosts so a mis-set URL cannot place orders.
         if value.host != "data.alpaca.markets":
             raise ValueError("Alpaca historical data must use data.alpaca.markets")
+        return value
+
+    @field_validator("jev_base_url")
+    @classmethod
+    def jev_openrouter_only(cls, value: AnyHttpUrl) -> AnyHttpUrl:
+        # The key is an OpenRouter key; never send it to a host whose contract is unverified.
+        if value.scheme != "https" or value.host != "openrouter.ai" or (value.path or "").rstrip("/") != "/api":
+            raise ValueError("JEV_BASE_URL must be https://openrouter.ai/api")
         return value
 
     @field_validator("paper_demo_identity")

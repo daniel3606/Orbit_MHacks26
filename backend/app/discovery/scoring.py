@@ -73,6 +73,8 @@ class NewsStory:
     source: str
     url: str
     published: datetime
+    article_id: str = ""
+    summary: str | None = None  # provider summary; sent to the classifier only, never shown
 
 
 @dataclass(frozen=True)

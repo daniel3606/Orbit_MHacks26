@@ -21,6 +21,11 @@ export function requestDailyDiscovery(localDate: string) {
   return realtime.call(conn => conn.reducers.requestDailyDiscovery({ localDate }));
 }
 
+/** Asks the server for recent news on one company; it coalesces repeats and fetches on its side. */
+export function requestStockNews(ticker: string) {
+  return realtime.call(conn => conn.reducers.requestStockNews({ ticker }));
+}
+
 export function requestPaperSync() {
   return realtime.call(conn => conn.reducers.requestPaperSync({}));
 }

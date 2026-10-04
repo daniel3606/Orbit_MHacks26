@@ -12,6 +12,8 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 const TICKER_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 const MAX_ITEMS = 3;
 const MAX_REASONS = 2;
+/** Jev coverage label for an item's headline choice; reasons mirror the Python classifier's codes. */
+const NEWS_CLASSIFICATION_PATTERN = /^(classified|not_configured|no_articles|(partial|unavailable):[a-z_]{1,32})$/;
 /** Requests per local day, so a failing job cannot be retried without bound. */
 const MAX_JOBS_PER_DAY = 6;
 /** Discovery sets kept per person; older sets and their items are pruned. */
@@ -120,6 +122,7 @@ const DiscoveryItemInput = t.object('DiscoveryItemInput', {
   newsSource: t.option(t.string()),
   newsUrl: t.option(t.string()),
   newsPublishedAt: t.option(t.timestamp()),
+  newsClassification: t.string(),
 });
 
 type ItemInput = {
@@ -139,6 +142,7 @@ type ItemInput = {
   newsSource?: string;
   newsUrl?: string;
   newsPublishedAt?: Timestamp;
+  newsClassification: string;
 };
 
 function text(value: string, max: number, code: string) {
@@ -244,6 +248,7 @@ export const publishDailyDiscovery = spacetimedb.reducer(
         }
         if (item.newsCount < 1) throw new SenderError('invalid_news');
       }
+      if (!NEWS_CLASSIFICATION_PATTERN.test(item.newsClassification)) throw new SenderError('invalid_news_classification');
     }
 
     // Writes begin only after every check above has passed.
@@ -287,6 +292,7 @@ export const publishDailyDiscovery = spacetimedb.reducer(
         newsSource: item.newsSource,
         newsUrl: item.newsUrl,
         newsPublishedAt: item.newsPublishedAt,
+        newsClassification: item.newsClassification,
       });
     }
 

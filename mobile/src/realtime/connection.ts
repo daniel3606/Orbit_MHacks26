@@ -249,6 +249,13 @@ export type NotificationVM = {
   read: boolean;
   createdAt: Date;
 };
+/** Up to three recent stories the server judged to be about this company. No labels or scores. */
+export type StockNewsVM = {
+  ticker: string;
+  stories: { headline: string; source: string; url: string; publishedAt: Date }[];
+  classification: string;
+  checkedAt: Date;
+};
 export type MarketVM = {
   /** A screen currently holds the market subscription. */
   subscribed: boolean;
@@ -262,6 +269,7 @@ export type MarketVM = {
   signals: Record<string, SignalVM>;
   generation: GenerationVM | null;
   capabilities: CapabilityVM[];
+  news: Record<string, StockNewsVM>;
 };
 
 const EMPTY_MARKET: MarketVM = {
@@ -274,6 +282,7 @@ const EMPTY_MARKET: MarketVM = {
   signals: {},
   generation: null,
   capabilities: [],
+  news: {},
 };
 
 /** How long the market subscription outlives its last screen. */
@@ -878,6 +887,22 @@ class ConnectionManager {
         detail: c.detail,
         checkedAt: toDate(c.checkedAt),
       })),
+      news: Object.fromEntries(
+        [...conn.db.stockNews.iter()].map(row => [
+          row.ticker,
+          {
+            ticker: row.ticker,
+            stories: row.stories.map(story => ({
+              headline: story.headline,
+              source: story.source,
+              url: story.url,
+              publishedAt: toDate(story.publishedAt),
+            })),
+            classification: row.classification,
+            checkedAt: toDate(row.checkedAt),
+          },
+        ])
+      ),
     };
   }
 
@@ -903,6 +928,7 @@ class ConnectionManager {
         tables.marketGeneration,
         tables.providerCapability,
         tables.marketCloses,
+        tables.stockNews,
       ]);
   }
 

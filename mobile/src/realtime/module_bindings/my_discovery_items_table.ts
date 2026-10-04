@@ -31,4 +31,5 @@ export default __t.row({
   newsSource: __t.option(__t.string()).name("news_source"),
   newsUrl: __t.option(__t.string()).name("news_url"),
   newsPublishedAt: __t.option(__t.timestamp()).name("news_published_at"),
+  newsClassification: __t.string().name("news_classification"),
 });

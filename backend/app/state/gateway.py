@@ -22,6 +22,7 @@ from app.state.dto import (
     JobV1,
     MarketGenerationV1,
     MarketQuoteV1,
+    NewsClassificationV1,
     PaperAccountV1,
     PaperOrderV1,
     ProviderCapabilityV1,
@@ -235,6 +236,17 @@ class SpacetimeGateway:
 
     async def publish_daily_discovery(self, args: Sequence[Any]) -> None:
         await self.call_reducer("publish_daily_discovery", list(args))
+
+    async def worker_news_classifications(self) -> list[NewsClassificationV1]:
+        return self._parse(NewsClassificationV1, await self._view("worker_news_classifications"))
+
+    async def record_news_classifications(self, job_id: int, attempt: int, rows: Sequence[dict[str, Any]]) -> None:
+        """Stores Jev judgments under the caller's lease on the job that produced them."""
+        await self.call_reducer("record_news_classifications", [job_id, attempt, list(rows)])
+
+    async def publish_stock_news(self, args: Sequence[Any]) -> None:
+        """Replaces one ticker's news and completes the `stock_news` job under its lease."""
+        await self.call_reducer("publish_stock_news", list(args))
 
     async def worker_assistant_messages(self) -> list[dict[str, Any]]:
         return await self._view("worker_assistant_messages")

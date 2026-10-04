@@ -68,7 +68,8 @@ make mobile-ios
 and starts Metro. After the first build, `make mobile-start` is enough.
 
 Check the backend: `curl localhost:8000/health` (liveness) and `curl localhost:8000/ready` (SpacetimeDB reachable
-and the worker token allowlisted).
+and the worker token allowlisted). `/ready` reports Jev as `not_configured`, `configured` (key present, no successful
+call recorded), `verified` (the worker got a schema-valid response), or `fail`, with the reason in `details.jev`.
 
 ### Market data (Phase 2)
 
@@ -98,6 +99,25 @@ and the worker token allowlisted).
 - Fixture data is rejected unless an admin runs `set_service_flag "allow_fixture_data" true`. Only the tests do
   this, and only on `orbit-test`.
 
+### News classification (Jev)
+
+- Jev is TypeSafe's decision model, called through OpenRouter's Decisions API
+  (`POST https://openrouter.ai/api/alpha/decisions`). Put an OpenRouter API key in `backend/.env` as `JEV_API_KEY`
+  (backend only), then restart `make worker`. Settings: `JEV_MODEL` (pinned `typesafe/jev-1.13`),
+  `JEV_TIMEOUT_SECONDS`, `JEV_CALLS_PER_MINUTE`, `JEV_BURST`, `JEV_MAX_RETRIES`.
+- On start the worker sends one fixed probe article and publishes the result as the `jev.news_classification`
+  provider capability. That row is what `/ready` reads.
+- The worker classifies the Finnhub headlines that Discovery and the assistant already fetch. Results are cached by
+  article content, ticker and classifier version, shared by every job, and stored in the private
+  `news_classification` table under the job's lease. Jev never changes a Discovery score or a Trend Score; see
+  [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md#news-classification-jev-news-v1-2026-10-04) for what each label feeds.
+- Stock Detail asks the server for news (`request_stock_news`); the worker reads up to 8 Finnhub headlines, keeps the
+  best 3 that Jev judges to be about the company, and publishes them to the public `stock_news` table. The phone never
+  calls Finnhub or Jev.
+- Without a key, or when Jev fails, news stays unlabeled and each consumer records why (`not_configured`,
+  `unavailable:auth_failed`, …). Nothing falls back to OpenAI, and nothing is read as neutral sentiment.
+- `ORBIT_LIVE_PROVIDER_TESTS=1 uv run pytest -q -s tests/test_jev_live.py` checks the live contract (billed calls).
+
 ### Paper trading
 
 - Keep `ALPACA_BASE_URL` on `https://paper-api.alpaca.markets`. Market-data keys use `data.alpaca.markets` and cannot place orders.
@@ -123,18 +143,19 @@ The in-app **Connection diagnostics** screen shows the resolved address and runt
 make check
 ```
 
-- `make test-spacetime` — republishes a throwaway `orbit-test` database (data wiped) and runs 31 WebSocket SDK
+- `make test-spacetime` — republishes a throwaway `orbit-test` database (data wiped) and runs the WebSocket SDK
   integration tests:
   - subscription-then-mutation, two-identity isolation, validation, optimistic versioning, session restore
   - worker gating, idempotent enqueue, claim/complete, duplicate completion, backoff, lease-expiry fencing, revocation
   - market publication authorization, stale/out-of-order/invalid snapshots
   - recommendation publication, owner isolation, and stale-profile rejection
   - paper-order ownership, idempotent client keys, stale account revisions, partial fills, rejection, and lease restart
+  - news classifications: lease-only writes, validation before any write, first judgment kept, consumers see nothing
   - Python worker → SpacetimeDB → subscribed client (labeled fixture provider)
 - `make test-backend` — unit tests (hand-calculated features, prior-only normalization, coverage, provider retry,
   rate limits and deduplication, calendar) plus real-server worker round trips against `orbit-test`. The
   real-server tests are skipped automatically if the server or database is absent.
-- `make test-live` — opt-in checks against Finnhub and Alpaca Market Data with the backend keys. Kept separate from fixture tests.
+- `make test-live` — opt-in checks against Finnhub, Alpaca Market Data and Jev with the backend keys. Kept separate from fixture tests.
 - `make typecheck` — `tsc` for module, tests and app; `expo lint`; app ↔ module preference-contract check; `mypy --strict`.
 
 ## Changing the module

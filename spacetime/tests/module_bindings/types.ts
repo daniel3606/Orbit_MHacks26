@@ -102,6 +102,7 @@ export const DailyDiscoveryItem = __t.object("DailyDiscoveryItem", {
   newsSource: __t.option(__t.string()),
   newsUrl: __t.option(__t.string()),
   newsPublishedAt: __t.option(__t.timestamp()),
+  newsClassification: __t.string(),
 });
 export type DailyDiscoveryItem = __Infer<typeof DailyDiscoveryItem>;
 
@@ -122,6 +123,7 @@ export const DiscoveryItemInput = __t.object("DiscoveryItemInput", {
   newsSource: __t.option(__t.string()),
   newsUrl: __t.option(__t.string()),
   newsPublishedAt: __t.option(__t.timestamp()),
+  newsClassification: __t.string(),
 });
 export type DiscoveryItemInput = __Infer<typeof DiscoveryItemInput>;
 
@@ -269,6 +271,40 @@ export type MyRecommendations = __Infer<typeof MyRecommendations>;
 
 export const MyServiceGrant = __t.object("MyServiceGrant", {});
 export type MyServiceGrant = __Infer<typeof MyServiceGrant>;
+
+export const NewsClassification = __t.object("NewsClassification", {
+  cacheKey: __t.string(),
+  ticker: __t.string(),
+  articleId: __t.string(),
+  contentHash: __t.string(),
+  classifierVersion: __t.string(),
+  relevant: __t.bool(),
+  relevanceScore: __t.f64(),
+  eventType: __t.string(),
+  sentiment: __t.string(),
+  materiality: __t.string(),
+  keep: __t.bool(),
+  publishedAt: __t.timestamp(),
+  classifiedAt: __t.timestamp(),
+  jobId: __t.u64(),
+});
+export type NewsClassification = __Infer<typeof NewsClassification>;
+
+export const NewsClassificationInput = __t.object("NewsClassificationInput", {
+  cacheKey: __t.string(),
+  ticker: __t.string(),
+  articleId: __t.string(),
+  contentHash: __t.string(),
+  classifierVersion: __t.string(),
+  relevant: __t.bool(),
+  relevanceScore: __t.f64(),
+  eventType: __t.string(),
+  sentiment: __t.string(),
+  materiality: __t.string(),
+  keep: __t.bool(),
+  publishedAt: __t.timestamp(),
+});
+export type NewsClassificationInput = __Infer<typeof NewsClassificationInput>;
 
 export const Notification = __t.object("Notification", {
   id: __t.u64(),
@@ -542,6 +578,26 @@ export const StockInput = __t.object("StockInput", {
 });
 export type StockInput = __Infer<typeof StockInput>;
 
+export const StockNews = __t.object("StockNews", {
+  ticker: __t.string(),
+  get stories() {
+    return __t.array(StockNewsStory);
+  },
+  classification: __t.string(),
+  classifierVersion: __t.string(),
+  checkedAt: __t.timestamp(),
+  jobId: __t.u64(),
+});
+export type StockNews = __Infer<typeof StockNews>;
+
+export const StockNewsStory = __t.object("StockNewsStory", {
+  headline: __t.string(),
+  source: __t.string(),
+  url: __t.string(),
+  publishedAt: __t.timestamp(),
+});
+export type StockNewsStory = __Infer<typeof StockNewsStory>;
+
 export const TrendSignal = __t.object("TrendSignal", {
   ticker: __t.string(),
   generation: __t.u64(),
@@ -616,6 +672,9 @@ export type WorkerJobProfiles = __Infer<typeof WorkerJobProfiles>;
 
 export const WorkerJobs = __t.object("WorkerJobs", {});
 export type WorkerJobs = __Infer<typeof WorkerJobs>;
+
+export const WorkerNewsClassifications = __t.object("WorkerNewsClassifications", {});
+export type WorkerNewsClassifications = __Infer<typeof WorkerNewsClassifications>;
 
 export const WorkerPaperAccount = __t.object("WorkerPaperAccount", {});
 export type WorkerPaperAccount = __Infer<typeof WorkerPaperAccount>;
