@@ -8,6 +8,7 @@
     "scheme": "orbit",
     "userInterfaceStyle": "dark",
     "ios": {
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.dllim.orbitmhacks26",
       "buildNumber": "1",
       "supportsTablet": false,
@@ -32,7 +33,8 @@
         {
           "backgroundColor": "#050308",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 180
+          "resizeMode": "contain",
+          "imageWidth": 200
         }
       ],
       "expo-secure-store"
