@@ -1,6 +1,8 @@
 import Constants from 'expo-constants';
 import { TurboModuleRegistry, type TurboModule } from 'react-native';
 
+import { resolveClientConfig } from './public-endpoint';
+
 interface SourceCodeSpec extends TurboModule {
   getConstants(): { scriptURL: string };
 }
@@ -16,12 +18,10 @@ function bundleHost(): string | undefined {
  * Public, non-secret client configuration. EXPO_PUBLIC_* values are inlined
  * into the bundle, so nothing secret may ever be placed here.
  *
- * SpacetimeDB address resolution:
- *  1. EXPO_PUBLIC_SPACETIME_URI if set (use for staging, or if 2 fails).
- *  2. In development, the host that served the JS bundle, on port 3000. That
- *     host is the dev machine as reachable from this device — on a physical
- *     iPhone `localhost` would be the phone itself.
- *  3. ws://127.0.0.1:3000 as a last resort (simulator only).
+ * Development may use EXPO_PUBLIC_SPACETIME_URI, otherwise the Metro host on
+ * port 3000, otherwise ws://127.0.0.1:3000 for the simulator.
+ * Production and TestFlight require a public wss:// URI and database name.
+ * A missing value fails the build and the launch; localhost is not a fallback.
  */
 function devMachineHost(): { host: string; source: string } | undefined {
   if (!__DEV__) return undefined;
@@ -36,19 +36,18 @@ function devMachineHost(): { host: string; source: string } | undefined {
   return undefined;
 }
 
-const explicitUri = process.env.EXPO_PUBLIC_SPACETIME_URI?.trim();
-const devHost = explicitUri ? undefined : devMachineHost();
+const devHost = devMachineHost();
+const resolved = resolveClientConfig({
+  explicitUri: process.env.EXPO_PUBLIC_SPACETIME_URI,
+  database: process.env.EXPO_PUBLIC_SPACETIME_DB,
+  appEnv: process.env.EXPO_PUBLIC_APP_ENV,
+  dev: __DEV__,
+  devHost: devHost?.host,
+  devHostSource: devHost?.source,
+});
 
 export const config = {
-  spacetimeUri: explicitUri || (devHost ? `ws://${devHost.host}:3000` : 'ws://127.0.0.1:3000'),
-  spacetimeUriSource: explicitUri ? 'EXPO_PUBLIC_SPACETIME_URI' : devHost?.source ?? 'default (simulator only)',
-  spacetimeDatabase: process.env.EXPO_PUBLIC_SPACETIME_DB?.trim() || 'orbit-dev',
-  /**
-   * Secure-storage scope for the session token. Dev-derived hosts share one
-   * scope so a changing LAN IP does not orphan the guest session; explicit
-   * URIs are scoped to their host so a token is never replayed elsewhere.
-   */
-  sessionScope: explicitUri ? explicitUri.replace(/^wss?:\/\//, '') : 'devhost',
+  ...resolved,
   /** Shown in UI: this build uses server-issued guest identities, not OIDC. */
   authMode: 'device_guest' as const,
 };

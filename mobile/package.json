@@ -46,6 +46,7 @@
     "ios": "expo run:ios",
     "ios:device": "expo run:ios --device",
     "typecheck": "tsc --noEmit",
+    "test": "node --test src/config/public-endpoint.test.ts src/features/home/snapshotMode.test.ts src/features/stock/cases.test.ts src/features/watchlist/store.test.ts",
     "lint": "expo lint",
     "check:contract": "node --no-warnings scripts/check-contract.mts",
     "generate:bindings": "cd ../spacetime && spacetime generate --lang typescript --out-dir ../mobile/src/realtime/module_bindings --module-path ./spacetimedb --yes"

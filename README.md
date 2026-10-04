@@ -137,6 +137,20 @@ call recorded), `verified` (the worker got a schema-valid response), or `fail`, 
 device with `cd mobile && npx expo run:ios --device` (requires an Apple developer signing team in Xcode).
 The in-app **Connection diagnostics** screen shows the resolved address and runtime checks.
 
+A TestFlight build does not use that fallback. It requires a public `wss://` SpacetimeDB URL in the EAS
+production environment. See [TestFlight](#testflight) below.
+
+### TestFlight
+
+The iPhone app subscribes to SpacetimeDB. FastAPI is the health endpoint (`/health`, `/ready`); the worker is a
+separate process. Neither is reachable from TestFlight until SpacetimeDB, the API, and the worker are on public
+hosts. No production URL is committed.
+
+Cloud iOS builds use `mobile/eas.json` profile `production` (`dev.orbit.mobile`, remote build numbers, no client
+secrets). `mobile/.eas/workflows/testflight.yml` builds and submits on pushes to `main` that touch `mobile/**`
+after you link the Expo project to this GitHub repository. The production profile refuses to build until
+`EXPO_PUBLIC_SPACETIME_URI` and `EXPO_PUBLIC_SPACETIME_DB` exist in the EAS production environment.
+
 ## Tests and checks
 
 ```bash
@@ -152,6 +166,7 @@ make check
   - paper-order ownership, idempotent client keys, stale account revisions, partial fills, rejection, and lease restart
   - news classifications: lease-only writes, validation before any write, first judgment kept, consumers see nothing
   - Python worker → SpacetimeDB → subscribed client (labeled fixture provider)
+- `make test-mobile` — client unit tests, including the production URL refusal
 - `make test-backend` — unit tests (hand-calculated features, prior-only normalization, coverage, provider retry,
   rate limits and deduplication, calendar) plus real-server worker round trips against `orbit-test`. The
   real-server tests are skipped automatically if the server or database is absent.
@@ -169,8 +184,9 @@ make check
 
 | File | Purpose |
 |---|---|
-| `backend/.env.example` → `backend/.env` | Backend settings; provider keys are optional in this phase |
-| `mobile/.env.example` → `mobile/.env` | Public client config only (`EXPO_PUBLIC_*` is bundled into the app) |
+| `backend/.env.example` → `backend/.env` | Backend settings; provider keys stay here and never in the app |
+| `mobile/.env.example` → `mobile/.env` | Public client config only (`EXPO_PUBLIC_*` is bundled into the app). Production values belong in EAS, not in git |
+| `compose.yaml` | API + worker containers for a public SpacetimeDB host. Does not start SpacetimeDB |
 | `spacetime/.env.example` | Test script variables; the module itself has no env vars |
 
 Secrets never go in `EXPO_PUBLIC_*` variables or in source control. Alpaca configuration accepts only the paper

@@ -13,6 +13,34 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
+
+def _is_non_public_host(host: str | None) -> bool:
+    """True for loopback, link-local, RFC1918, and carrier-grade NAT."""
+    if host is None:
+        return True
+    name = host.lower().rstrip(".")
+    if name in {"localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal"}:
+        return True
+    if name.endswith(".local") or name.endswith(".internal"):
+        return True
+    parts = name.split(".")
+    if len(parts) != 4 or not all(part.isdigit() for part in parts):
+        return False
+    numbers = [int(part) for part in parts]
+    if any(part > 255 for part in numbers):
+        return False
+    first, second = numbers[0], numbers[1]
+    if first in (10, 127):
+        return True
+    if first == 192 and second == 168:
+        return True
+    if first == 172 and 16 <= second <= 31:
+        return True
+    if first == 169 and second == 254:
+        return True
+    return first == 100 and 64 <= second <= 127
+
+
 ALPACA_PAPER_URL = "https://paper-api.alpaca.markets"
 # Market-data host only. Never a trading host: historical bars must not be
 # able to submit or enable live orders (PRD §17, §24).
@@ -128,6 +156,17 @@ class Settings(BaseSettings):
     def alpaca_pair(self) -> "Settings":
         if (self.alpaca_api_key_id is None) != (self.alpaca_api_secret_key is None):
             raise ValueError("ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY must be set together")
+        return self
+
+    @model_validator(mode="after")
+    def production_is_public(self) -> "Settings":
+        if self.app_env != "production":
+            return self
+        url = self.spacetime_http_url
+        if url.scheme != "https" or _is_non_public_host(url.host):
+            raise ValueError("APP_ENV=production requires SPACETIME_HTTP_URL to be a public https URL")
+        if self.spacetime_service_token is None:
+            raise ValueError("APP_ENV=production requires SPACETIME_SERVICE_TOKEN")
         return self
 
     def resolved_service_token(self) -> SecretStr | None:

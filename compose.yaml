@@ -1,0 +1,33 @@
+# Runs the Orbit API and worker against an already public SpacetimeDB.
+# This file does not start SpacetimeDB and does not publish a hostname.
+# Local development stays on `make api` and `make worker`.
+
+services:
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: true
+    environment:
+      APP_ENV: production
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    build:
+      context: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: true
+    environment:
+      APP_ENV: production
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers"]
