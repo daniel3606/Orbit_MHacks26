@@ -437,6 +437,7 @@ export const Stock = __t.object("Stock", {
   displayOrder: __t.u16(),
   active: __t.bool(),
   updatedAt: __t.timestamp(),
+  logoUrl: __t.string(),
 });
 export type Stock = __Infer<typeof Stock>;
 
@@ -450,6 +451,7 @@ export const StockInput = __t.object("StockInput", {
   kind: __t.string(),
   benchmark: __t.string(),
   displayOrder: __t.u16(),
+  logoUrl: __t.string(),
 });
 export type StockInput = __Infer<typeof StockInput>;
 

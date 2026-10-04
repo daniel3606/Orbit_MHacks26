@@ -22,4 +22,5 @@ export default __t.row({
   displayOrder: __t.u16().name("display_order"),
   active: __t.bool(),
   updatedAt: __t.timestamp().name("updated_at"),
+  logoUrl: __t.string().name("logo_url"),
 });

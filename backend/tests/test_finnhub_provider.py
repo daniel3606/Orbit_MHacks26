@@ -141,6 +141,17 @@ async def test_capability_probe_reports_plan_restrictions():
     assert await p.has("quote") and not await p.has("daily_candles")
 
 
+async def test_profile_keeps_https_logo_only():
+    logo = "https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/GOOG.png"
+    body = {"name": "Alphabet Inc", "exchange": "NASDAQ", "finnhubIndustry": "Media", "currency": "USD", "logo": logo}
+    p = await provider(Recorder([httpx.Response(200, json=body)])).get_profile("GOOGL")
+    assert p is not None and p.logo_url == logo
+    for bad in ("http://example.com/a.png", "", None, 7, "https://x/" + "a" * 300):
+        p = await provider(Recorder([httpx.Response(200, json={**body, "logo": bad})])).get_profile("GOOGL")
+        assert p is not None and p.logo_url == ""
+    assert await provider(Recorder([httpx.Response(200, json={})])).get_profile("SPY") is None
+
+
 async def test_candles_parsed_as_split_adjusted_bars():
     # Daily candles are stamped 00:00 UTC of the session date.
     body = {"s": "ok", "t": [1790812800, 1790899200], "o": [1, 2], "h": [2, 3], "l": [0.5, 1.5], "c": [1.5, 2.5], "v": [100, 200]}
