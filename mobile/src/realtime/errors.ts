@@ -32,6 +32,7 @@ const MESSAGES: Record<string, string> = {
   invalid_message_length: 'Keep the question under 500 characters.',
   invalid_request_key: 'That question could not be sent. Try again.',
   assistant_unavailable: 'Orbit cannot answer right now.',
+  assistant_busy: 'Orbit is still answering. Start a new chat once it finishes.',
 };
 
 export function messageFor(code: string): string {

@@ -2,6 +2,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -19,13 +20,21 @@ import {
   type StyleProp,
   type TextStyle,
 } from 'react-native';
+import Reanimated, {
+  Easing as REasing,
+  interpolateColor,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, { Path, SvgXml } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { askOrbit, requestHomeBrief } from '@/features/profile/actions';
+import { askOrbit, clearOrbitChat, requestHomeBrief } from '@/features/profile/actions';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
 import { chartSeries } from '@/features/market/series';
-import { realtime, type StockVM } from '@/realtime/connection';
+import { realtime, type AssistantMessageVM, type StockVM } from '@/realtime/connection';
 import { messageFor, toAppError } from '@/realtime/errors';
 import { useRealtime } from '@/realtime/hooks';
 import { StockGraph } from '@/ui/StockGraph';
@@ -60,7 +69,12 @@ const SUGGESTIONS = ['What is a stock?', 'What does my Trend Score mean?', 'How 
 const MAX_QUESTION = 500;
 
 const TYPE_PACE_MS = 16;
+/** Room for the ask sheet before it has been measured. */
 const ASK_CLEARANCE = 132;
+/** The black of the tab bar; the ask sheet uses it so the two read as one surface. */
+const NAV_BLACK = '#000000';
+const MUTED = '#8E8E93';
+const FIELD_EASE = { duration: 220, easing: REasing.out(REasing.cubic) };
 
 function tickersFor(body: string, citations: string, stocks: StockVM[]): string[] {
   const known = new Set(stocks.map(stock => stock.ticker));
@@ -85,6 +99,13 @@ function tickersFor(body: string, citations: string, stocks: StockVM[]): string[
     if (named || new RegExp(`\\b${stock.ticker}\\b`).test(body)) add(stock.ticker);
   }
   return found.slice(0, 2);
+}
+
+function lastQuestionIndex(chat: AssistantMessageVM[]): number {
+  for (let index = chat.length - 1; index >= 0; index -= 1) {
+    if (chat[index].role === 'user') return index;
+  }
+  return -1;
 }
 
 function clientKey(prefix: string): string {
@@ -213,6 +234,22 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = (Platform.OS === 'ios' ? 49 : 56) + insets.bottom;
   const { lift, inset } = useKeyboardLift(tabBarHeight);
+  const [sheetHeight, setSheetHeight] = useState(ASK_CLEARANCE);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [clearing, setClearing] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrolledTo = useRef<string | null>(null);
+  /** The latest question when history arrived; undefined until then. */
+  const [openedOn, setOpenedOn] = useState<string | null | undefined>(undefined);
+  const reduceMotion = useReducedMotion();
+  const focused = useSharedValue(0);
+  const fieldStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(focused.get(), [0, 1], ['rgba(255,255,255,0.38)', 'rgba(255,255,255,0.88)']),
+    backgroundColor: interpolateColor(focused.get(), [0, 1], ['rgba(255,255,255,0.025)', 'rgba(255,255,255,0.06)']),
+  }));
+  function setFocus(next: boolean) {
+    focused.set(withTiming(next ? 1 : 0, reduceMotion ? { duration: 0 } : FIELD_EASE));
+  }
   useFocusEffect(
     useCallback(() => {
       const release = realtime.acquireMarket();
@@ -265,6 +302,10 @@ export default function HomeScreen() {
     );
   }
   const opened = historyIds.current !== null;
+  if (opened && openedOn === undefined) {
+    const last = lastQuestionIndex(chat);
+    setOpenedOn(last >= 0 ? chat[last].id : null);
+  }
   const remembered = (id: string) => historyIds.current?.has(id) ?? false;
   const introIsRemembered = opened && !!(brief && remembered(brief.id));
   const introParts = paragraphs(intro);
@@ -305,6 +346,107 @@ export default function HomeScreen() {
     router.push({ pathname: '/stock/[ticker]', params: { ticker } });
   }
 
+  function startNewChat() {
+    Alert.alert('Start a new chat?', 'Your questions and Orbit’s answers will be cleared. Today’s note stays.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'New chat',
+        style: 'destructive',
+        onPress: async () => {
+          setClearing(true);
+          try {
+            await clearOrbitChat();
+            setDraft('');
+            setSendError(null);
+            inflightKey.current = null;
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
+          } catch (err) {
+            // Reported on its own: the thread's retry line re-sends the last question.
+            Alert.alert('Couldn’t start a new chat', messageFor(toAppError(err).code));
+          } finally {
+            setClearing(false);
+          }
+        },
+      },
+    ]);
+  }
+
+  /** A newly asked question scrolls to the top, so its answer types into a clear screen. */
+  function onLatestTurn(id: string, event: LayoutChangeEvent) {
+    if (scrolledTo.current === id) return;
+    scrolledTo.current = id;
+    scrollRef.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - space.sm), animated: true });
+  }
+
+  function renderMessage(message: AssistantMessageVM, index: number) {
+    if (message.role === 'user') {
+      return (
+        <View key={message.id} style={styles.userBubble} accessibilityLabel={`You asked: ${message.body}`}>
+          <Text style={styles.userLine}>{message.body}</Text>
+        </View>
+      );
+    }
+    const parts = paragraphs(message.body || (message.status === 'pending' ? 'Thinking…' : ''));
+    const replyReady =
+      remembered(message.id) || parts.every((_, part) => typedIds.current.has(`${message.id}:${part}`));
+    return (
+      <View key={message.id} style={styles.threadItem}>
+        {remembered(message.id) ? (
+          <Text style={styles.replyLine}>{message.body}</Text>
+        ) : (
+          parts.map((text, part) => {
+            const blockIndex = blocks.findIndex(block => block.id === `${message.id}:${part}`);
+            return (
+              <TypedText
+                key={`${message.id}:${part}`}
+                text={text}
+                active={blockIndex >= 0 && typedThrough(blockIndex)}
+                onDone={() => markTyped(`${message.id}:${part}`)}
+                style={styles.replyLine}
+              />
+            );
+          })
+        )}
+        {message.status === 'complete' && replyReady
+          ? tickersFor(message.body, message.citations, stocks).map(ticker => {
+              const stock = stocks.find(item => item.ticker === ticker);
+              const quote = rt.market.quotes[ticker];
+              if (!stock) return null;
+              return (
+                <Pressable
+                  key={ticker}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${stock.name || ticker}`}
+                  onPress={() => openTicker(ticker)}>
+                  <StockGraph
+                    title={stock.name || ticker}
+                    plain
+                    price={quote?.price ?? null}
+                    previousClose={quote?.previousClose}
+                    points={chartSeries(rt.market.closes[ticker], quote)}
+                  />
+                </Pressable>
+              );
+            })
+          : null}
+        {message.status === 'failed' ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              const previous = [...chat.slice(0, index)].reverse().find(item => item.role === 'user');
+              if (previous) void send(previous.body);
+            }}>
+            <Text style={styles.retry}>Try again</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
+
+  const latest = lastQuestionIndex(chat);
+  /** Only a question asked since Home opened gets a screen of its own; history opens where it left off. */
+  const askedNow = opened && latest >= 0 && openedOn !== undefined && chat[latest].id !== openedOn;
+
   function onFrame(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
     setFrame(current => (current.width === width && current.height === height ? current : { width, height }));
@@ -323,7 +465,9 @@ export default function HomeScreen() {
       ) : null}
       <SafeAreaView style={styles.fill} edges={['top']}>
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingBottom: ASK_CLEARANCE + inset }]}
+          ref={scrollRef}
+          onLayout={event => setViewportHeight(Math.round(event.nativeEvent.layout.height))}
+          contentContainerStyle={[styles.scroll, { paddingBottom: sheetHeight + space.lg + inset }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}>
@@ -335,9 +479,32 @@ export default function HomeScreen() {
                 Orbit
               </T>
             </View>
-            <View accessibilityLabel="Notifications" style={styles.bellWrap}>
-              <Image source={bell} style={styles.bell} resizeMode="contain" accessibilityIgnoresInvertColors />
-              <View style={styles.badge} />
+            <View style={styles.actions}>
+              {chat.length > 0 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="New chat"
+                  accessibilityState={{ disabled: clearing || sending || thinking }}
+                  disabled={clearing || sending || thinking}
+                  onPress={startNewChat}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.iconButton, { opacity: clearing || sending || thinking ? 0.4 : pressed ? 0.6 : 1 }]}>
+                  <Svg width={24} height={24} viewBox="0 0 24 24">
+                    <Path
+                      d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5 M17.5 3.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 8.5-8.5z"
+                      stroke="#FFFFFF"
+                      strokeWidth={1.7}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  </Svg>
+                </Pressable>
+              ) : null}
+              <View accessibilityLabel="Notifications" style={styles.bellWrap}>
+                <Image source={bell} style={styles.bell} resizeMode="contain" accessibilityIgnoresInvertColors />
+                <View style={styles.badge} />
+              </View>
             </View>
           </View>
 
@@ -399,70 +566,19 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {chat.map((message, index) => {
-            if (message.role === 'user') {
-              return (
-                <Text key={message.id} style={styles.userLine}>
-                  {message.body}
-                </Text>
-              );
-            }
-            const parts = paragraphs(message.body || (message.status === 'pending' ? 'Thinking…' : ''));
-            const replyReady =
-              remembered(message.id) || parts.every((_, part) => typedIds.current.has(`${message.id}:${part}`));
-            return (
-              <View key={message.id} style={styles.threadItem}>
-                {remembered(message.id) ? (
-                  <Text style={styles.replyLine}>{message.body}</Text>
-                ) : (
-                  parts.map((text, part) => {
-                    const blockIndex = blocks.findIndex(block => block.id === `${message.id}:${part}`);
-                    return (
-                      <TypedText
-                        key={`${message.id}:${part}`}
-                        text={text}
-                        active={blockIndex >= 0 && typedThrough(blockIndex)}
-                        onDone={() => markTyped(`${message.id}:${part}`)}
-                        style={styles.replyLine}
-                      />
-                    );
-                  })
-                )}
-                {message.status === 'complete' && replyReady
-                  ? tickersFor(message.body, message.citations, stocks).map(ticker => {
-                      const stock = stocks.find(item => item.ticker === ticker);
-                      const quote = rt.market.quotes[ticker];
-                      if (!stock) return null;
-                      return (
-                        <Pressable
-                          key={ticker}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Open ${stock.name || ticker}`}
-                          onPress={() => openTicker(ticker)}>
-                          <StockGraph
-                            title={stock.name || ticker}
-                            plain
-                            price={quote?.price ?? null}
-                            previousClose={quote?.previousClose}
-                            points={chartSeries(rt.market.closes[ticker], quote)}
-                          />
-                        </Pressable>
-                      );
-                    })
-                  : null}
-                {message.status === 'failed' ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => {
-                      const previous = [...chat.slice(0, index)].reverse().find(item => item.role === 'user');
-                      if (previous) void send(previous.body);
-                    }}>
-                    <Text style={styles.retry}>Try again</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            );
-          })}
+          {(latest >= 0 ? chat.slice(0, latest) : chat).map((message, index) => renderMessage(message, index))}
+          {latest >= 0 ? (
+            <View
+              onLayout={askedNow ? event => onLatestTurn(chat[latest].id, event) : undefined}
+              style={[
+                styles.turn,
+                askedNow && viewportHeight > 0
+                  ? { minHeight: viewportHeight - sheetHeight - inset - space.lg - space.sm }
+                  : null,
+              ]}>
+              {chat.slice(latest).map((message, offset) => renderMessage(message, latest + offset))}
+            </View>
+          ) : null}
           {sendError ? (
             <Pressable accessibilityRole="button" onPress={() => void send(lastText.current || draft)}>
               <Text style={styles.retry}>{sendError} Tap to retry.</Text>
@@ -470,19 +586,24 @@ export default function HomeScreen() {
           ) : null}
         </ScrollView>
 
-        <Animated.View style={[styles.askWrap, { transform: [{ translateY: lift }] }]}>
-          <Text style={styles.notice}>For learning. Not a recommendation to buy or sell.</Text>
-          <View style={styles.ask}>
+        <Animated.View
+          onLayout={event => setSheetHeight(Math.round(event.nativeEvent.layout.height))}
+          style={[styles.askSheet, { transform: [{ translateY: lift }] }]}>
+          <Reanimated.View style={[styles.ask, fieldStyle]}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
+              onFocus={() => setFocus(true)}
+              onBlur={() => setFocus(false)}
               placeholder="Ask Anything..."
-              placeholderTextColor="#999999"
+              placeholderTextColor={MUTED}
               style={styles.askInput}
               accessibilityLabel="Ask Anything"
               maxLength={MAX_QUESTION}
               editable={!sending}
               returnKeyType="send"
+              keyboardAppearance="dark"
+              selectionColor="#FFFFFF"
               onSubmitEditing={() => void send(draft)}
             />
             <Pressable
@@ -503,7 +624,8 @@ export default function HomeScreen() {
                 />
               </Svg>
             </Pressable>
-          </View>
+          </Reanimated.View>
+          <Text style={styles.notice}>For learning. Not a recommendation to buy or sell.</Text>
         </Animated.View>
       </SafeAreaView>
     </View>
@@ -528,6 +650,8 @@ const styles = StyleSheet.create({
   brand: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   mark: { width: 34, height: 34 },
   wordmark: { fontFamily: font.bold, fontSize: 26, lineHeight: 32, color: '#FFFFFF' },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  iconButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   bellWrap: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   bell: { width: 26, height: 26 },
   badge: {
@@ -550,7 +674,20 @@ const styles = StyleSheet.create({
   },
   suggestionText: { fontFamily: font.regular, fontSize: 14, lineHeight: 18, color: colors.text },
   threadItem: { gap: space.md },
-  userLine: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: '#FFFFFF', textAlign: 'right' },
+  /** The latest question and its answer. */
+  turn: { gap: space.lg },
+  /** The reader's own question: a purple bubble like the send button, so it never reads as Orbit's reply or a suggestion. */
+  userBubble: {
+    alignSelf: 'flex-end',
+    maxWidth: '82%',
+    marginTop: space.sm,
+    borderRadius: 20,
+    borderBottomRightRadius: 6,
+    paddingHorizontal: space.lg,
+    paddingVertical: 10,
+    backgroundColor: colors.secondary,
+  },
+  userLine: { fontFamily: font.regular, fontSize: 16, lineHeight: 22, color: '#FFFFFF' },
   replyLine: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.text },
   retry: { fontFamily: font.regular, fontSize: 14, lineHeight: 20, color: '#FFFFFF' },
   notice: {
@@ -559,29 +696,39 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: '#999999',
     textAlign: 'center',
-    marginBottom: space.sm,
+    marginTop: space.sm,
   },
-  askWrap: {
+  /** Rises out of the tab bar, so the ask field reads as part of the navigation. */
+  askSheet: {
     position: 'absolute',
-    left: space.lg,
-    right: space.lg,
-    bottom: space.sm,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: space.md,
+    paddingHorizontal: 20,
+    paddingBottom: space.md,
+    borderTopLeftRadius: space.xl,
+    borderTopRightRadius: space.xl,
+    backgroundColor: NAV_BLACK,
   },
   ask: {
-    minHeight: 52,
-    borderRadius: 26,
+    minHeight: 50,
+    borderRadius: 14,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: space.lg,
-    paddingRight: 8,
-    backgroundColor: '#1E1F20',
+    paddingRight: 6,
   },
   askInput: {
     flex: 1,
     fontFamily: font.regular,
     fontSize: 16,
-    color: colors.text,
-    paddingVertical: space.md,
+    lineHeight: 21,
+    color: '#FFFFFF',
+    backgroundColor: 'transparent',
+    paddingVertical: 12,
+    paddingRight: space.sm,
   },
   askButton: {
     width: 36,
