@@ -9,7 +9,7 @@ DB ?= orbit-dev
 SIM ?= iPhone 17 Pro
 
 .PHONY: help check-node install stdb-start publish generate worker-identity api worker test-live ingest-now \
-        mobile-ios mobile-start test test-spacetime test-backend typecheck check
+        mobile-ios mobile-start test test-spacetime test-backend test-mobile typecheck check
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -54,13 +54,16 @@ test-spacetime: check-node ## Republish orbit-test (wiped) and run realtime inte
 test-backend: ## Backend unit + integration tests (integration needs orbit-test)
 	cd backend && uv run pytest -q
 
+test-mobile: check-node ## Mobile unit tests (no device, no Metro)
+	cd mobile && npm test
+
 test-live: ## Opt-in live Finnhub, Alpaca and Jev checks (uses backend keys; costs API calls)
 	cd backend && ORBIT_LIVE_PROVIDER_TESTS=1 uv run pytest -q -s tests/test_finnhub_live.py tests/test_alpaca_live.py tests/test_jev_live.py
 
 ingest-now: ## Ask the worker to run market ingestion now (admin CLI identity)
 	spacetime call --no-config $(DB) --server local request_market_ingest
 
-test: test-spacetime test-backend ## All automated tests
+test: test-spacetime test-backend test-mobile ## All automated tests
 
 typecheck: check-node ## Type-check module, tests, mobile and backend
 	cd spacetime/spacetimedb && npx tsc --noEmit -p .

@@ -85,6 +85,40 @@ def test_alpaca_keys_must_be_paired():
         Settings(alpaca_api_key_id="abc", _env_file=None)
 
 
+def test_production_requires_a_public_https_spacetime_url_and_token():
+    with pytest.raises(ValidationError, match="public https URL"):
+        Settings(
+            app_env="production",
+            spacetime_service_token=SecretStr("t"),
+            _env_file=None,
+            spacetime_service_token_file=None,
+        )
+    with pytest.raises(ValidationError, match="public https URL"):
+        Settings(
+            app_env="production",
+            spacetime_http_url="https://192.168.1.20",
+            spacetime_service_token=SecretStr("t"),
+            _env_file=None,
+            spacetime_service_token_file=None,
+        )
+    with pytest.raises(ValidationError, match="SPACETIME_SERVICE_TOKEN"):
+        Settings(
+            app_env="production",
+            spacetime_http_url="https://stdb.example.com",
+            _env_file=None,
+            spacetime_service_token_file=None,
+        )
+    settings = Settings(
+        app_env="production",
+        spacetime_http_url="https://stdb.example.com",
+        spacetime_service_token=SecretStr("service-token"),
+        _env_file=None,
+        spacetime_service_token_file=None,
+    )
+    assert settings.spacetime_http_url.host == "stdb.example.com"
+    assert "service-token" not in repr(settings)
+
+
 def test_secrets_not_in_repr():
     s = Settings(openai_api_key="sk-should-not-leak", _env_file=None, spacetime_service_token_file=None)
     assert "sk-should-not-leak" not in repr(s)
@@ -100,12 +134,34 @@ def test_health_and_unready_without_server():
         assert client.get("/health").json() == {"api_version": "v1", "status": "ok", "env": "development"}
         ready = client.get("/ready")
         assert ready.status_code == 503
-        assert ready.json()["checks"]["spacetimedb"] == "fail"
-        assert ready.json()["checks"]["service_identity"] == "not_configured"
+        body = ready.json()
+        assert body["checks"]["spacetimedb"] == "fail"
+        assert body["checks"]["service_identity"] == "not_configured"
+        assert body["checks"]["jev"] == "not_configured"
+        assert body["details"]["jev"] == "JEV_API_KEY is unset"
+        assert "127.0.0.1" not in ready.text
         missing = client.get("/nope")
         assert missing.status_code == 404
         assert missing.json()["error"]["code"] == "not_found"
         assert missing.headers["x-request-id"]
+
+
+def test_ready_does_not_echo_provider_secrets():
+    settings = Settings(
+        _env_file=None,
+        spacetime_http_url="http://127.0.0.1:9",
+        spacetime_service_token_file=None,
+        jev_api_key=SecretStr("jev-secret-value"),
+        finnhub_api_key=SecretStr("finnhub-secret-value"),
+        openai_api_key=SecretStr("openai-secret-value"),
+    )
+    with TestClient(create_app(settings)) as client:
+        ready = client.get("/ready")
+        assert ready.json()["checks"]["jev"] == "configured"
+        assert "unreadable" in ready.json()["details"]["jev"]
+        assert "jev-secret-value" not in ready.text
+        assert "finnhub-secret-value" not in ready.text
+        assert "openai-secret-value" not in ready.text
 
 
 def test_blank_env_values_are_treated_as_unset(tmp_path, monkeypatch):
