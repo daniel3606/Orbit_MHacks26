@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 
 import { backgroundGradient, colors, HIT, radius, space, type } from './theme';
 
@@ -147,9 +148,26 @@ export function OptionCard({
         selected && styles.optionSelected,
         pressed && { opacity: 0.85 },
       ]}>
-      <View style={[styles.marker, multi ? styles.markerSquare : styles.markerRound, selected && styles.markerOn]}>
-        {selected ? <View style={[styles.markerDot, multi && { borderRadius: 2 }]} /> : null}
-      </View>
+      {multi ? (
+        <View style={[styles.marker, styles.markerSquare, selected && styles.markerChecked]}>
+          {selected ? (
+            <Svg width={12} height={10} viewBox="0 0 12 10">
+              <Path
+                d="M1 5l3.5 3.5L11 1.5"
+                stroke={colors.background}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </Svg>
+          ) : null}
+        </View>
+      ) : (
+        <View style={[styles.marker, styles.markerRound, selected && styles.markerOn]}>
+          {selected ? <View style={styles.markerDot} /> : null}
+        </View>
+      )}
       <View style={{ flex: 1 }}>
         <T variant="label">{title}</T>
         {description ? (
@@ -279,8 +297,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   markerRound: { borderRadius: 11 },
-  markerSquare: { borderRadius: 6 },
+  markerSquare: { borderRadius: 6, borderColor: colors.textSubtle },
   markerOn: { borderColor: colors.text },
+  markerChecked: { borderColor: colors.text, backgroundColor: colors.text },
   markerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.text },
   chip: {
     paddingHorizontal: space.md,
