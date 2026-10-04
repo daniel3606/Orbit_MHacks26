@@ -8,8 +8,8 @@ import { StockLogo } from '@/features/market/StockLogo';
 import type { DiscoveryItemVM, QuoteVM, StockVM } from '@/realtime/connection';
 import { colors, font, radius, space } from '@/ui/theme';
 
-/** Solid fill for Discover company cards — dark purple, no gradient. */
-const CARD_FILL = '#120528';
+/** Solid fill for Discover company cards — near-black purple, no gradient. */
+const CARD_FILL = '#080312';
 
 /** Moves smaller than this read as unchanged, so a flat day is not coloured as a gain. */
 const FLAT = 0.00005;
