@@ -51,6 +51,8 @@ export function Screen({
   header,
   footer,
   footerBorder = true,
+  /** Cap the column width (useful for onboarding on wide web/desktop previews). */
+  maxWidth,
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -59,22 +61,26 @@ export function Screen({
   header?: ReactNode;
   footer?: ReactNode;
   footerBorder?: boolean;
+  maxWidth?: number;
 }) {
+  const column = maxWidth ? ([styles.column, { maxWidth }] as const) : null;
   return (
     <LinearGradient colors={backgroundGradient} locations={[0, 0.5, 1] as const} style={styles.fill}>
       <SafeAreaView style={styles.fill} edges={edges}>
-        {header ? <View style={styles.header}>{header}</View> : null}
-        {scroll ? (
-          <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets>
-            {children}
-          </ScrollView>
-        ) : (
-          <View style={[styles.content, { flex: 1 }]}>{children}</View>
-        )}
-        {footer ? <View style={[styles.footer, !footerBorder && { borderTopWidth: 0 }]}>{footer}</View> : null}
+        <View style={[styles.fill, column]}>
+          {header ? <View style={styles.header}>{header}</View> : null}
+          {scroll ? (
+            <ScrollView
+              contentContainerStyle={styles.content}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets>
+              {children}
+            </ScrollView>
+          ) : (
+            <View style={[styles.content, { flex: 1 }]}>{children}</View>
+          )}
+          {footer ? <View style={[styles.footer, !footerBorder && { borderTopWidth: 0 }]}>{footer}</View> : null}
+        </View>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -248,6 +254,7 @@ export function Gap({ size = 'lg' }: { size?: keyof typeof space }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  column: { width: '100%', alignSelf: 'center' },
   content: { padding: space.xl, gap: space.lg },
   header: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
   footer: {
