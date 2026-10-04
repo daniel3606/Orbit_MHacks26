@@ -86,6 +86,19 @@ describe('assistant messages stay with their owner', () => {
     );
   });
 
+  test('starting a new chat waits for the answer being written', async () => {
+    await assert.rejects(a.conn.reducers.clearAssistantChat({}), (err: Error) => {
+      assert.match(String(err?.message ?? err), /assistant_busy/);
+      return true;
+    });
+    assert.equal([...a.conn.db.myAssistantMessages.iter()].length, 2);
+  });
+
+  test('starting a new chat only clears the caller’s own messages', async () => {
+    await b.conn.reducers.clearAssistantChat({});
+    assert.equal([...a.conn.db.myAssistantMessages.iter()].length, 2);
+  });
+
   test('a guest cannot publish an assistant reply', async () => {
     await assert.rejects(
       a.conn.reducers.publishAssistantReply({

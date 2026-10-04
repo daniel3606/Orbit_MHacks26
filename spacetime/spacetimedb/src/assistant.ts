@@ -98,6 +98,21 @@ export const enqueueAssistantMessage = spacetimedb.reducer(
   }
 );
 
+/**
+ * The caller starts a new conversation. Their questions and Orbit's answers are
+ * deleted, so the worker no longer reads them as context; the daily note stays.
+ * Refused while an answer is being written, so a reply cannot land in a cleared thread.
+ */
+export const clearAssistantChat = spacetimedb.reducer({}, ctx => {
+  requireConsumer(ctx);
+  for (const row of ctx.db.job.owner.filter(ctx.sender)) {
+    if (row.kind === JOB_KIND.answerMessage && isActiveStatus(row.status)) throw new SenderError('assistant_busy');
+  }
+  for (const row of [...ctx.db.assistantMessage.by_owner.filter(ctx.sender)]) {
+    if (row.kind === 'chat') ctx.db.assistantMessage.id.delete(row.id);
+  }
+});
+
 /** Ask for the home introduction. An in-flight or fresh brief is left as-is. */
 export const requestHomeBrief = spacetimedb.reducer({ clientKey: t.string() }, (ctx, { clientKey }) => {
   requireConsumer(ctx);

@@ -37,6 +37,7 @@ import {
 import ApplyPaperSnapshotReducer from "./apply_paper_snapshot_reducer";
 import BindPaperDemoReducer from "./bind_paper_demo_reducer";
 import ClaimJobReducer from "./claim_job_reducer";
+import ClearAssistantChatReducer from "./clear_assistant_chat_reducer";
 import CompleteJobReducer from "./complete_job_reducer";
 import CompleteOnboardingReducer from "./complete_onboarding_reducer";
 import ConfigureMarketScheduleReducer from "./configure_market_schedule_reducer";
@@ -341,6 +342,7 @@ const reducersSchema = __reducers(
   __reducerSchema("apply_paper_snapshot", ApplyPaperSnapshotReducer),
   __reducerSchema("bind_paper_demo", BindPaperDemoReducer),
   __reducerSchema("claim_job", ClaimJobReducer),
+  __reducerSchema("clear_assistant_chat", ClearAssistantChatReducer),
   __reducerSchema("complete_job", CompleteJobReducer),
   __reducerSchema("complete_onboarding", CompleteOnboardingReducer),
   __reducerSchema("configure_market_schedule", ConfigureMarketScheduleReducer),

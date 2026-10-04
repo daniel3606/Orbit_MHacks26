@@ -45,24 +45,33 @@ export function Screen({
   children,
   scroll = true,
   edges = ['top', 'bottom'],
+  header,
   footer,
+  footerBorder = true,
 }: {
   children: ReactNode;
   scroll?: boolean;
   edges?: Edge[];
+  /** Stays above the scrolling content. */
+  header?: ReactNode;
   footer?: ReactNode;
+  footerBorder?: boolean;
 }) {
   return (
     <LinearGradient colors={backgroundGradient} locations={[0, 0.5, 1] as const} style={styles.fill}>
       <SafeAreaView style={styles.fill} edges={edges}>
+        {header ? <View style={styles.header}>{header}</View> : null}
         {scroll ? (
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets>
             {children}
           </ScrollView>
         ) : (
           <View style={[styles.content, { flex: 1 }]}>{children}</View>
         )}
-        {footer ? <View style={styles.footer}>{footer}</View> : null}
+        {footer ? <View style={[styles.footer, !footerBorder && { borderTopWidth: 0 }]}>{footer}</View> : null}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -220,6 +229,7 @@ export function Gap({ size = 'lg' }: { size?: keyof typeof space }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { padding: space.xl, gap: space.lg },
+  header: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.xl },
   footer: {
     paddingHorizontal: space.xl,
     paddingTop: space.md,
@@ -256,7 +266,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  optionSelected: { borderColor: colors.accent, backgroundColor: colors.selection },
+  optionSelected: { borderColor: colors.text, backgroundColor: colors.selection },
   marker: {
     width: 22,
     height: 22,
@@ -267,8 +277,8 @@ const styles = StyleSheet.create({
   },
   markerRound: { borderRadius: 11 },
   markerSquare: { borderRadius: 6 },
-  markerOn: { borderColor: colors.accent },
-  markerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
+  markerOn: { borderColor: colors.text },
+  markerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.text },
   chip: {
     paddingHorizontal: space.md,
     paddingVertical: space.xs + 2,

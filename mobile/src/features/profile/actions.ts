@@ -57,6 +57,11 @@ export function askOrbit(clientKey: string, text: string) {
   return realtime.call(conn => conn.reducers.enqueueAssistantMessage({ clientKey, text }));
 }
 
+/** Clears the caller's questions and answers so the next question starts a new conversation. */
+export function clearOrbitChat() {
+  return realtime.call(conn => conn.reducers.clearAssistantChat({}));
+}
+
 export function requestBackendCheck(): Promise<string> {
   const requestKey = `check-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   return realtime.call(conn => conn.reducers.requestBackendCheck({ requestKey })).then(() => requestKey);

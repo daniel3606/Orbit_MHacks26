@@ -9,10 +9,13 @@ import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
 
+import { BuildingScreen } from '@/features/onboarding/BuildingScreen';
 import { StartupScreen } from '@/features/session/StartupScreen';
 import { realtime } from '@/realtime/connection';
 import { useRealtime } from '@/realtime/hooks';
+import { useReveal } from '@/state/reveal';
 import { colors, font } from '@/ui/theme';
 
 void SplashScreen.preventAutoHideAsync();
@@ -38,6 +41,7 @@ const navTheme = {
 
 export default function RootLayout() {
   const rt = useRealtime();
+  const revealing = useReveal(s => s.active);
   const [fontsLoaded, fontError] = useFonts({
     Manrope_400Regular,
     Manrope_500Medium,
@@ -70,32 +74,40 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={navTheme}>
       <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          headerShadowVisible: false,
-          headerStyle: { backgroundColor: colors.background },
-          headerTintColor: colors.text,
-          headerTitleStyle: { fontFamily: font.semibold, color: colors.text },
-          contentStyle: { backgroundColor: colors.background },
-        }}>
-        <Stack.Protected guard={hasProfile}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="edit-preferences"
-            options={{ presentation: 'modal', headerShown: true, title: 'Edit preferences' }}
-          />
-          <Stack.Screen name="stock/[ticker]" />
-          <Stack.Screen
-            name="trade"
-            options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
-          />
-        </Stack.Protected>
-        <Stack.Protected guard={!hasProfile}>
-          <Stack.Screen name="onboarding" />
-        </Stack.Protected>
-        <Stack.Screen name="diagnostics" options={{ headerShown: true, title: 'Diagnostics' }} />
-      </Stack>
+      <View style={styles.fill}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.text,
+            headerTitleStyle: { fontFamily: font.semibold, color: colors.text },
+            contentStyle: { backgroundColor: colors.background },
+          }}>
+          <Stack.Protected guard={hasProfile}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="edit-preferences"
+              options={{ presentation: 'modal', headerShown: true, title: 'Edit preferences' }}
+            />
+            <Stack.Screen name="stock/[ticker]" />
+            <Stack.Screen
+              name="trade"
+              options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
+            />
+          </Stack.Protected>
+          <Stack.Protected guard={!hasProfile}>
+            <Stack.Screen name="onboarding" />
+          </Stack.Protected>
+          <Stack.Screen name="diagnostics" options={{ headerShown: true, title: 'Diagnostics' }} />
+        </Stack>
+        {/* After onboarding: covers the switch from the questionnaire to Home. */}
+        {revealing ? <BuildingScreen /> : null}
+      </View>
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+});
