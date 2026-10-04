@@ -3,6 +3,7 @@ import type { Identity } from 'spacetimedb';
 import spacetimedb from './schema';
 import { requireAdmin, requireConsumer, requireService, type Ctx } from './auth';
 import { enqueuePaperReconcile, enqueuePaperSubmit, JOB_KIND, JOB_STATUS, requireLease } from './jobs';
+import { notifyOrderStatusChange } from './notifications';
 
 export const PAPER_SLOT = 'demo';
 const ORDER_STATUSES = [
@@ -303,6 +304,7 @@ export const applyPaperSnapshot = spacetimedb.reducer(
     let pending = false;
     for (const update of args.orders as OrderIn[]) {
       for (const row of ctx.db.paperOrder.by_owner_key.filter([job.owner, update.clientOrderKey])) {
+        const previousStatus = row.status;
         ctx.db.paperOrder.orderId.update({
           ...row,
           status: update.status,
@@ -313,6 +315,18 @@ export const applyPaperSnapshot = spacetimedb.reducer(
           revision: args.revision,
           updatedAt: ctx.timestamp,
         });
+        // Brokerage apps alert when an order fills, partially fills, rejects, or cancels.
+        if (previousStatus !== update.status) {
+          notifyOrderStatusChange(ctx, job.owner, {
+            clientOrderKey: update.clientOrderKey,
+            ticker: row.ticker,
+            side: row.side,
+            status: update.status,
+            filledQuantityMicros: update.filledQuantityMicros,
+            filledAvgPriceMicros: update.filledAvgPriceMicros,
+            rejectReason: update.rejectReason,
+          });
+        }
       }
       if (!TERMINAL.has(update.status)) pending = true;
     }

@@ -239,6 +239,16 @@ export type PaperOrderVM = {
   rejectReason: string | null;
   updatedAt: Date;
 };
+export type NotificationVM = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  ticker: string | null;
+  href: string | null;
+  read: boolean;
+  createdAt: Date;
+};
 export type MarketVM = {
   /** A screen currently holds the market subscription. */
   subscribed: boolean;
@@ -292,6 +302,7 @@ export type RealtimeSnapshot = {
   paperPositions: PaperPositionVM[];
   paperOrders: PaperOrderVM[];
   assistantMessages: AssistantMessageVM[];
+  notifications: NotificationVM[];
   market: MarketVM;
   diagnostics: Diagnostics;
 };
@@ -321,6 +332,7 @@ function initialSnapshot(): RealtimeSnapshot {
     paperPositions: [],
     paperOrders: [],
     assistantMessages: [],
+    notifications: [],
     market: EMPTY_MARKET,
     diagnostics: {
       uri: config.spacetimeUri,
@@ -510,6 +522,7 @@ class ConnectionManager {
         tables.myAssistantMessages,
         tables.myDailyDiscovery,
         tables.myDiscoveryItems,
+        tables.myNotifications,
       ]);
   }
 
@@ -532,6 +545,7 @@ class ConnectionManager {
       conn.db.myAssistantMessages,
       conn.db.myDailyDiscovery,
       conn.db.myDiscoveryItems,
+      conn.db.myNotifications,
       conn.db.stock,
       conn.db.marketQuote,
       conn.db.trendSignal,
@@ -756,6 +770,18 @@ class ConnectionManager {
           rejectReason: row.rejectReason ?? null,
           updatedAt: toDate(row.updatedAt),
         })),
+        notifications: [...conn.db.myNotifications.iter()]
+          .map(row => ({
+            id: row.id.toString(),
+            kind: row.kind,
+            title: row.title,
+            body: row.body,
+            ticker: row.ticker ?? null,
+            href: row.href ?? null,
+            read: row.readAt != null,
+            createdAt: toDate(row.createdAt),
+          }))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
       },
       { lastEventAt: new Date() }
     );

@@ -17,6 +17,8 @@ import CreatePaperOrderIntentReducer from "../create_paper_order_intent_reducer"
 import EnqueueAssistantMessageReducer from "../enqueue_assistant_message_reducer";
 import FailJobReducer from "../fail_job_reducer";
 import GrantServiceIdentityReducer from "../grant_service_identity_reducer";
+import MarkAllNotificationsReadReducer from "../mark_all_notifications_read_reducer";
+import MarkNotificationReadReducer from "../mark_notification_read_reducer";
 import PublishAssistantReplyReducer from "../publish_assistant_reply_reducer";
 import PublishDailyDiscoveryReducer from "../publish_daily_discovery_reducer";
 import PublishMarketSnapshotReducer from "../publish_market_snapshot_reducer";
@@ -47,6 +49,8 @@ export type CreatePaperOrderIntentParams = __Infer<typeof CreatePaperOrderIntent
 export type EnqueueAssistantMessageParams = __Infer<typeof EnqueueAssistantMessageReducer>;
 export type FailJobParams = __Infer<typeof FailJobReducer>;
 export type GrantServiceIdentityParams = __Infer<typeof GrantServiceIdentityReducer>;
+export type MarkAllNotificationsReadParams = __Infer<typeof MarkAllNotificationsReadReducer>;
+export type MarkNotificationReadParams = __Infer<typeof MarkNotificationReadReducer>;
 export type PublishAssistantReplyParams = __Infer<typeof PublishAssistantReplyReducer>;
 export type PublishDailyDiscoveryParams = __Infer<typeof PublishDailyDiscoveryReducer>;
 export type PublishMarketSnapshotParams = __Infer<typeof PublishMarketSnapshotReducer>;

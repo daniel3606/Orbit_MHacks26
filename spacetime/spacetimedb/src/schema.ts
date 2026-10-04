@@ -495,6 +495,33 @@ export const paperOrder = table(
 );
 
 /**
+ * In-app notification inbox (private). Stock apps typically alert on order
+ * fills/rejects, daily research ready, and account milestones — same triggers
+ * here. `dedupeKey` keeps reconciles and retries from stacking duplicates.
+ */
+export const notification = table(
+  {
+    name: 'notification',
+    indexes: [
+      { accessor: 'by_owner', algorithm: 'btree', columns: ['owner'] },
+      { accessor: 'by_owner_dedupe', algorithm: 'btree', columns: ['owner', 'dedupeKey'] },
+    ],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity(),
+    kind: t.string(),
+    title: t.string(),
+    body: t.string(),
+    ticker: t.option(t.string()),
+    href: t.option(t.string()),
+    dedupeKey: t.string(),
+    readAt: t.option(t.timestamp()),
+    createdAt: t.timestamp(),
+  }
+);
+
+/**
  * One caller's assistant transcript. Private. `clientKey` makes a repeated tap
  * the same message. The model never writes this table directly.
  */
@@ -554,6 +581,7 @@ const spacetimedb = schema({
   paperAccount,
   paperPosition,
   paperOrder,
+  notification,
   assistantMessage,
   marketSchedule,
 });

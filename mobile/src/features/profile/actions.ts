@@ -66,3 +66,11 @@ export function requestBackendCheck(): Promise<string> {
   const requestKey = `check-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   return realtime.call(conn => conn.reducers.requestBackendCheck({ requestKey })).then(() => requestKey);
 }
+
+export function markNotificationRead(notificationId: string) {
+  return realtime.call(conn => conn.reducers.markNotificationRead({ notificationId: BigInt(notificationId) }));
+}
+
+export function markAllNotificationsRead() {
+  return realtime.call(conn => conn.reducers.markAllNotificationsRead({}));
+}

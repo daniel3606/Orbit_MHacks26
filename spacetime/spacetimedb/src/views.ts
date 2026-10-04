@@ -11,6 +11,7 @@ import spacetimedb, {
   assistantMessage,
   dailyDiscovery,
   dailyDiscoveryItem,
+  notification,
   profileBranding,
   recommendation,
   recommendationGeneration,
@@ -21,6 +22,7 @@ import { isService } from './auth';
 import { JOB_KIND, JOB_STATUS } from './jobs';
 
 const MY_JOBS_LIMIT = 20;
+const MY_NOTIFICATIONS_LIMIT = 50;
 const WORKER_JOBS_LIMIT = 100;
 
 // ---- Caller-scoped user views: every lookup is keyed on ctx.sender. ----
@@ -111,6 +113,16 @@ export const myPaperOrders = spacetimedb.view(
       .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch))
       .slice(0, MY_JOBS_LIMIT);
   }
+);
+
+/** Newest notifications for the caller (read and unread). */
+export const myNotifications = spacetimedb.view(
+  { name: 'my_notifications', public: true },
+  t.array(notification.rowType),
+  ctx =>
+    [...ctx.db.notification.by_owner.filter(ctx.sender)]
+      .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch))
+      .slice(0, MY_NOTIFICATIONS_LIMIT)
 );
 
 // ---- Service-gated worker views: non-service callers get nothing. ----

@@ -3,6 +3,7 @@ import type { Identity, Timestamp } from 'spacetimedb';
 import spacetimedb from './schema';
 import { requireConsumer, requireService, type Ctx } from './auth';
 import { JOB_KIND, JOB_STATUS, insertJob, isActiveStatus, requireLease } from './jobs';
+import { notifyDailyDiscoveryReady } from './notifications';
 import { ZODIAC_SIGNS } from './preferences';
 
 export const DISCOVERY_ALGORITHM_VERSION = 'discovery-v1.0.0';
@@ -298,6 +299,8 @@ export const publishDailyDiscovery = spacetimedb.reducer(
       }
       ctx.db.dailyDiscovery.id.delete(old.id);
     }
+
+    notifyDailyDiscoveryReady(ctx, job.owner, args.discoveryDate, args.title, args.items.length);
 
     ctx.db.job.jobId.update({
       ...job,

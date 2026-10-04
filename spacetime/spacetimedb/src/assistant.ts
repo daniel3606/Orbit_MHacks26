@@ -2,6 +2,7 @@ import { SenderError, t } from 'spacetimedb/server';
 import spacetimedb from './schema';
 import { requireConsumer, requireService } from './auth';
 import { JOB_KIND, JOB_STATUS, findByRequestKey, insertJob, isActiveStatus, requireLease } from './jobs';
+import { notifyDailyBriefReady } from './notifications';
 
 const MAX_USER_CHARS = 500;
 const MAX_REPLY_CHARS = 1800;
@@ -205,6 +206,9 @@ export const publishAssistantReply = spacetimedb.reducer(
       citations: args.citations,
       status: args.status,
     });
+    if (args.status === 'complete' && message.kind === 'brief') {
+      notifyDailyBriefReady(ctx, job.owner, args.replyClientKey);
+    }
     ctx.db.job.jobId.update({
       ...job,
       status: JOB_STATUS.succeeded,
