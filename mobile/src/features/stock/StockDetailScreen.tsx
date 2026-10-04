@@ -10,6 +10,7 @@ import { Path, Svg } from 'react-native-svg';
 import { exchangeLabel, formatMicros, formatShares, money, signedPct, stamp } from '@/features/market/format';
 import { RANGES, preferredRange, rangeSeries, type Range } from '@/features/market/series';
 import { stockAnalysis } from '@/features/stock/cases';
+import { performanceReadout, type PerformanceReadout } from '@/features/stock/readout';
 import { useWatchlist } from '@/features/watchlist/store';
 import { labelFor, SECTORS } from '@/features/onboarding/options';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
@@ -135,6 +136,54 @@ function Drawer({
   );
 }
 
+function tone(fraction: number): string {
+  if (Math.abs(fraction) < 0.00005) return colors.textMuted;
+  return fraction > 0 ? colors.success : colors.danger;
+}
+
+function QuoteHeader({ readout }: { readout: PerformanceReadout }) {
+  const label = [
+    readout.history?.date,
+    readout.price != null ? money(readout.price) : null,
+    readout.history?.fromStart?.text,
+    readout.latestSession?.text,
+    readout.rangeReturn?.text,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  return (
+    <View style={styles.quote} accessibilityRole="text" accessibilityLabel={label}>
+      {readout.history?.date ? <Text style={styles.quoteDate}>{readout.history.date}</Text> : null}
+      <Text style={styles.quotePrice} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
+        {readout.price == null ? '—' : money(readout.price)}
+      </Text>
+      {readout.history?.fromStart ? (
+        <Text style={[styles.quoteFrom, { color: tone(readout.history.fromStart.fraction) }]}>
+          {signedPct(readout.history.fromStart.fraction)}
+          <Text style={styles.quoteFromLabel}> from start of range</Text>
+        </Text>
+      ) : null}
+      <View style={styles.metrics}>
+        {readout.latestSession ? (
+          <Text style={[styles.metricValue, { color: tone(readout.latestSession.fraction) }]}>
+            {signedPct(readout.latestSession.fraction)}
+            <Text style={styles.metricLabel}>  latest session</Text>
+          </Text>
+        ) : (
+          <View />
+        )}
+        {readout.rangeReturn ? (
+          <Text style={styles.metricRange}>
+            {readout.rangeReturn.range}
+            <Text style={{ color: tone(readout.rangeReturn.fraction) }}>{`  ${signedPct(readout.rangeReturn.fraction)}`}</Text>
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function RangeSelector({
   value,
   available,
@@ -194,6 +243,16 @@ export default function StockDetailScreen() {
 
   const [picked, setPicked] = useState<Range | null>(null);
   const [holdingChart, setHoldingChart] = useState(false);
+  const [inspection, setInspection] = useState<{ symbol: string; point: { price: number; date: string | null } | null } | null>(null);
+  const inspect = inspection?.symbol === symbol ? inspection.point : null;
+  const onInspect = useCallback((point: { price: number; date: string | null } | null) => {
+    setInspection(current => {
+      const sameSymbol = current?.symbol === symbol;
+      const samePoint = current?.point?.price === point?.price && current?.point?.date === point?.date && (current?.point == null) === (point == null);
+      if (sameSymbol && samePoint) return current;
+      return { symbol, point };
+    });
+  }, [symbol]);
   const [positionOpen, setPositionOpen] = useState<boolean | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -210,6 +269,16 @@ export default function StockDetailScreen() {
 
   const range = picked ?? preferredRange(closes, quote);
   const series = rangeSeries(range, closes, quote);
+  const points = series?.points ?? [];
+  const readout = performanceReadout({
+    latestPrice: quote?.price ?? null,
+    previousClose: quote?.previousClose ?? null,
+    range,
+    rangeBase: series?.base ?? null,
+    rangeLatest: points.length > 0 ? points[points.length - 1] : quote?.price ?? null,
+    scrub: inspect,
+  });
+
   const available = (candidate: Range) => rangeSeries(candidate, closes, quote) !== null;
   const news = discovered?.news ?? null;
   const longer = range === '1D' || range === '5D' || range === '1M' ? rangeSeries('6M', closes, quote) : null;
@@ -274,7 +343,7 @@ export default function StockDetailScreen() {
           scrollEnabled={!holdingChart}
           contentContainerStyle={[
             styles.scroll,
-            { paddingBottom: space.lg + FOOTER_HEIGHT + Math.max(insets.bottom, space.lg) + space.sm },
+            { paddingBottom: FOOTER_HEIGHT + space.xxl + Math.max(insets.bottom, space.lg) + space.xl },
           ]}
           showsVerticalScrollIndicator={false}>
           <ConnectionBanner />
@@ -287,6 +356,7 @@ export default function StockDetailScreen() {
                 {[stock.exchange ? exchangeLabel(stock.exchange) : null, stock.sector ? labelFor(SECTORS, stock.sector) : null].filter(Boolean).join(' · ')}
               </Text>
             ) : null}
+            <QuoteHeader readout={readout} />
           </View>
 
           <StockGraph
@@ -294,11 +364,12 @@ export default function StockDetailScreen() {
             scrub
             height={CHART_HEIGHT}
             price={quote?.price ?? null}
-            previousClose={series?.base ?? quote?.previousClose}
+            previousClose={quote?.previousClose}
             points={series?.points}
             dates={series?.dates}
             baseline={series?.base}
             onScrubbingChange={setHoldingChart}
+            onInspect={onInspect}
           />
 
           <RangeSelector value={range} available={available} onChange={setPicked} />
@@ -503,14 +574,35 @@ const styles = StyleSheet.create({
   backIcon: { width: 35, height: 35 },
   scroll: { paddingHorizontal: space.xl, paddingTop: space.xs, gap: space.lg },
   titleBlock: { gap: 2 },
-  title: { fontFamily: font.semibold, fontSize: 24, lineHeight: 32, color: colors.text },
+  title: { fontFamily: font.semibold, fontSize: 22, lineHeight: 28, color: colors.text },
   subtitle: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted },
-  ranges: { flexDirection: 'row', alignItems: 'center', marginTop: -space.xs },
+  quote: { marginTop: space.md, gap: 2 },
+  quoteDate: { fontFamily: font.medium, fontSize: 13, lineHeight: 18, color: colors.textMuted },
+  quotePrice: {
+    fontFamily: font.semibold,
+    fontSize: 34,
+    lineHeight: 40,
+    letterSpacing: -0.4,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  quoteFrom: { fontFamily: font.medium, fontSize: 14, lineHeight: 18, fontVariant: ['tabular-nums'] },
+  quoteFromLabel: { fontFamily: font.regular, color: colors.textMuted },
+  metrics: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: space.md,
+  },
+  metricValue: { fontFamily: font.medium, fontSize: 15, lineHeight: 20, fontVariant: ['tabular-nums'] },
+  metricLabel: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted },
+  metricRange: { fontFamily: font.medium, fontSize: 15, lineHeight: 20, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  ranges: { flexDirection: 'row', alignItems: 'center', marginTop: -space.sm },
   range: {
-    minWidth: 39,
-    height: 24,
-    borderRadius: 6,
-    paddingHorizontal: space.xs,
+    flex: 1,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
