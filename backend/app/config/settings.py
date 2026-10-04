@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     jev_api_key: SecretStr | None = None
     jev_base_url: AnyHttpUrl | None = None
     openai_api_key: SecretStr | None = None
+    # Responses API model. Override without a code change. Docs: https://developers.openai.com/api/reference/resources/responses/methods/create/
+    openai_model: str = Field(default="gpt-4.1-mini", pattern=r"^[A-Za-z0-9._-]{1,64}$")
+    openai_timeout_seconds: float = Field(default=20.0, gt=1, le=45)
+    openai_max_output_tokens: int = Field(default=350, ge=80, le=600)
     alpaca_api_key_id: SecretStr | None = None
     alpaca_api_secret_key: SecretStr | None = None
     # Paper trading only. Historical bars use alpaca_data_base_url instead.

@@ -272,6 +272,42 @@ class FinnhubProvider:
             as_of=datetime.fromtimestamp(body["t"], UTC),
         )
 
+    async def company_news(self, ticker: str, start: date, end: date) -> list[dict[str, str]]:
+        """Recent headlines. Missing access or a bad payload is an empty list, not invented news."""
+        try:
+            body = await self._get(
+                "/company-news",
+                {"symbol": ticker, "from": start.isoformat(), "to": end.isoformat()},
+                600,
+            )
+        except (ProviderAccessDenied, ProviderUnavailable, ProviderContractError, ProviderRateLimited):
+            return []
+        if not isinstance(body, list):
+            return []
+        items: list[dict[str, str]] = []
+        for row in body:
+            if not isinstance(row, dict):
+                continue
+            headline = str(row.get("headline") or "").strip()
+            url = str(row.get("url") or "").strip()
+            source = str(row.get("source") or "").strip()
+            when = row.get("datetime")
+            if not headline or not url or not isinstance(when, int):
+                continue
+            items.append(
+                {
+                    "id": f"news:{ticker}:{when}",
+                    "headline": headline[:180],
+                    "url": url[:300],
+                    "source": source[:80] or "finnhub",
+                    "published": datetime.fromtimestamp(when, UTC).isoformat(),
+                    "ticker": ticker,
+                }
+            )
+            if len(items) >= 3:
+                break
+        return items
+
     async def get_holidays(self) -> list[Holiday]:
         body = await self._get("/stock/market-holiday", {"exchange": "US"}, HOLIDAY_TTL)
         data = body.get("data") if isinstance(body, dict) else None

@@ -190,6 +190,17 @@ export type PaperPositionVM = {
   marketValueMicros: string | null;
   unrealizedPlMicros: string | null;
 };
+export type AssistantMessageVM = {
+  id: string;
+  sequence: number;
+  role: string;
+  kind: string;
+  body: string;
+  citations: string;
+  status: string;
+  clientKey: string;
+  createdAt: Date;
+};
 export type PaperOrderVM = {
   clientOrderKey: string;
   ticker: string;
@@ -251,6 +262,7 @@ export type RealtimeSnapshot = {
   paperAccount: PaperAccountVM | null;
   paperPositions: PaperPositionVM[];
   paperOrders: PaperOrderVM[];
+  assistantMessages: AssistantMessageVM[];
   market: MarketVM;
   diagnostics: Diagnostics;
 };
@@ -277,6 +289,7 @@ function initialSnapshot(): RealtimeSnapshot {
     paperAccount: null,
     paperPositions: [],
     paperOrders: [],
+    assistantMessages: [],
     market: EMPTY_MARKET,
     diagnostics: {
       uri: config.spacetimeUri,
@@ -461,6 +474,7 @@ class ConnectionManager {
         tables.myPaperAccount,
         tables.myPaperPositions,
         tables.myPaperOrders,
+        tables.myAssistantMessages,
       ]);
   }
 
@@ -480,6 +494,7 @@ class ConnectionManager {
       conn.db.myPaperAccount,
       conn.db.myPaperPositions,
       conn.db.myPaperOrders,
+      conn.db.myAssistantMessages,
       conn.db.stock,
       conn.db.marketQuote,
       conn.db.trendSignal,
@@ -641,6 +656,19 @@ class ConnectionManager {
           marketValueMicros: row.marketValueMicros?.toString() ?? null,
           unrealizedPlMicros: row.unrealizedPlMicros?.toString() ?? null,
         })),
+        assistantMessages: [...conn.db.myAssistantMessages.iter()]
+          .map(row => ({
+            id: row.id.toString(),
+            sequence: row.sequence,
+            role: row.role,
+            kind: row.kind,
+            body: row.body,
+            citations: row.citations,
+            status: row.status,
+            clientKey: row.clientKey,
+            createdAt: toDate(row.createdAt),
+          }))
+          .sort((a, b) => a.sequence - b.sequence),
         paperOrders: [...conn.db.myPaperOrders.iter()].map(row => ({
           clientOrderKey: row.clientOrderKey,
           ticker: row.ticker,
@@ -864,6 +892,7 @@ class ConnectionManager {
       paperAccount: null,
       paperPositions: [],
       paperOrders: [],
+      assistantMessages: [],
     });
   }
 

@@ -5,6 +5,7 @@ import logging
 import signal
 import sys
 
+from app.assistant.handle import handlers as assistant_handlers
 from app.config.settings import get_settings
 from app.config.universe import load_universe
 from app.market.alpaca import AlpacaHistoricalProvider
@@ -48,6 +49,7 @@ async def main() -> int:
 
         handlers = default_handlers(settings.worker_id)
         provider: RoutedMarketProvider | None = None
+        news_provider: FinnhubProvider | None = None
         if settings.market_ingest_enabled and settings.finnhub_api_key is not None:
             quotes = FinnhubProvider(
                 settings.finnhub_api_key,
@@ -67,6 +69,7 @@ async def main() -> int:
                 )
             else:
                 log.warning("No Alpaca market-data keys; daily history stays on Finnhub capabilities")
+            news_provider = quotes
             provider = RoutedMarketProvider(quotes, history)
             ingest = IngestMarketHandler(provider, load_universe(), SignalConfig())
             handlers[ingest.kind] = ingest
@@ -105,6 +108,18 @@ async def main() -> int:
             )
         else:
             log.warning("Paper trading not registered (PAPER_DEMO_IDENTITY or Alpaca keys missing)")
+
+        handlers.update(
+            assistant_handlers(
+                api_key=settings.openai_api_key,
+                model=settings.openai_model,
+                timeout=settings.openai_timeout_seconds,
+                max_output_tokens=settings.openai_max_output_tokens,
+                news=news_provider,
+            )
+        )
+        if settings.openai_api_key is None:
+            log.warning("OPENAI_API_KEY is unset; home briefs use published data and chat stays unavailable")
 
         worker = Worker(
             gateway,
