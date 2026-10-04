@@ -1,4 +1,5 @@
 import { t } from 'spacetimedb/server';
+import type { Identity } from 'spacetimedb';
 import spacetimedb, {
   dailyBar,
   investmentProfile,
@@ -8,6 +9,8 @@ import spacetimedb, {
   paperOrder,
   paperPosition,
   assistantMessage,
+  dailyDiscovery,
+  dailyDiscoveryItem,
   profileBranding,
   recommendation,
   recommendationGeneration,
@@ -15,7 +18,7 @@ import spacetimedb, {
   userAccount,
 } from './schema';
 import { isService } from './auth';
-import { JOB_STATUS } from './jobs';
+import { JOB_KIND, JOB_STATUS } from './jobs';
 
 const MY_JOBS_LIMIT = 20;
 const WORKER_JOBS_LIMIT = 100;
@@ -327,6 +330,78 @@ export const workerAssistantRecommendations = spacetimedb.view(
       if (!current) continue;
       for (const item of ctx.db.recommendation.by_owner_generation.filter([row.owner, current.generation])) {
         out.push(item);
+      }
+    }
+    return out;
+  }
+);
+
+// ---- Discovery ----
+
+/** Discovery sets a worker may read per owner: enough history for novelty and theme rotation. */
+const DISCOVERY_HISTORY_SETS = 30;
+
+const byDateDesc = (a: { discoveryDate: string }, b: { discoveryDate: string }) =>
+  a.discoveryDate < b.discoveryDate ? 1 : a.discoveryDate > b.discoveryDate ? -1 : 0;
+
+/** The caller's most recent Discovery set. The client compares its date with the local day. */
+export const myDailyDiscovery = spacetimedb.view(
+  { name: 'my_daily_discovery', public: true },
+  t.option(dailyDiscovery.rowType),
+  ctx => [...ctx.db.dailyDiscovery.owner.filter(ctx.sender)].sort(byDateDesc)[0] ?? undefined
+);
+
+/** Companies in the caller's most recent set, in rank order. Never another person's. */
+export const myDiscoveryItems = spacetimedb.view(
+  { name: 'my_discovery_items', public: true },
+  t.array(dailyDiscoveryItem.rowType),
+  ctx => {
+    const latest = [...ctx.db.dailyDiscovery.owner.filter(ctx.sender)].sort(byDateDesc)[0];
+    if (!latest) return [];
+    return [...ctx.db.dailyDiscoveryItem.by_discovery.filter(latest.id)].sort((a, b) => a.rank - b.rank);
+  }
+);
+
+/** Owners of Discovery jobs the calling worker currently holds. */
+function leasedDiscoveryOwners(
+  running: Iterable<{ kind: string; owner: Identity; leaseOwner: Identity | undefined }>,
+  sender: Identity
+): Identity[] {
+  const owners = new Map<string, Identity>();
+  for (const row of running) {
+    if (row.kind !== JOB_KIND.dailyDiscovery) continue;
+    if (!row.leaseOwner || !row.leaseOwner.isEqual(sender)) continue;
+    owners.set(row.owner.toHexString(), row.owner);
+  }
+  return [...owners.values()];
+}
+
+/** Recent Discovery sets for the owner of a Discovery job this worker holds (theme rotation). */
+export const workerDiscoveryHistory = spacetimedb.view(
+  { name: 'worker_discovery_history', public: true },
+  t.array(dailyDiscovery.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return [];
+    const out = [];
+    for (const owner of leasedDiscoveryOwners(ctx.db.job.status.filter(JOB_STATUS.running), ctx.sender)) {
+      const sets = [...ctx.db.dailyDiscovery.owner.filter(owner)].sort(byDateDesc);
+      for (const set of sets.slice(0, DISCOVERY_HISTORY_SETS)) out.push(set);
+    }
+    return out;
+  }
+);
+
+/** Companies shown in those recent sets (novelty). */
+export const workerDiscoveryItems = spacetimedb.view(
+  { name: 'worker_discovery_items', public: true },
+  t.array(dailyDiscoveryItem.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return [];
+    const out = [];
+    for (const owner of leasedDiscoveryOwners(ctx.db.job.status.filter(JOB_STATUS.running), ctx.sender)) {
+      const sets = [...ctx.db.dailyDiscovery.owner.filter(owner)].sort(byDateDesc);
+      for (const set of sets.slice(0, DISCOVERY_HISTORY_SETS)) {
+        for (const item of ctx.db.dailyDiscoveryItem.by_discovery.filter(set.id)) out.push(item);
       }
     }
     return out;

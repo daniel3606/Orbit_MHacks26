@@ -41,6 +41,14 @@ log = logging.getLogger(__name__)
 SOURCE_RANK = {"fixture": 1, "finnhub_quote": 2, "finnhub_candle": 3, "alpaca_iex": 4, "alpaca_sip": 4}
 OHLCV_SOURCES = frozenset({"fixture", "finnhub_candle", "alpaca_iex", "alpaca_sip"})
 CLOSE_CONFLICT_TOLERANCE = Decimal("0.005")  # 0.5%: same session reported differently → adjustment event
+# Tickers with no stored history are backfilled a few at a time, so adding many
+# names to the universe never turns one run into a giant publish. SpacetimeDB
+# rejects reducer bodies of roughly 2 MB (HTTP 413); about 9,500 bars in one
+# publish was refused and 6,678 was accepted, so new history is capped well below.
+BACKFILL_TICKERS_PER_RUN = 16
+BACKFILL_BAR_BUDGET = 4_500
+# Company profiles are fetched only for tickers whose stored row lacks one.
+PROFILE_FETCHES_PER_RUN = 30
 
 
 def history_calendar_days(cfg: SignalConfig) -> int:
@@ -76,6 +84,34 @@ class IngestProvider(Protocol):
     async def get_profile(self, ticker: str) -> CompanyProfile | None: ...
     async def get_market_status(self) -> MarketStatus: ...
     async def get_holidays(self) -> list[Holiday]: ...
+
+
+def admit_history(
+    tickers: list[str],
+    fetched: list[list[DailyBar] | BaseException],
+    has_history: set[str],
+    budget: int = BACKFILL_BAR_BUDGET,
+) -> tuple[list[DailyBar], dict[str, str]]:
+    """Bars to publish this run, plus a note per ticker that was held back.
+
+    Tickers that already have stored history always pass (a run adds a few bars each).
+    A first backfill is admitted only while it fits the remaining bar budget; the rest
+    wait for the next run, when they are fetched again.
+    """
+    admitted: list[DailyBar] = []
+    notes: dict[str, str] = {}
+    for ticker, history in zip(tickers, fetched, strict=True):
+        if isinstance(history, BaseException):
+            code = history.code if isinstance(history, ProviderError) else "internal_error"
+            notes[ticker] = f"history_unavailable:{code}"
+            continue
+        if ticker not in has_history:
+            if len(history) > budget:
+                notes[ticker] = "history_backfill_pending"
+                continue
+            budget -= len(history)
+        admitted.extend(history)
+    return admitted, notes
 
 
 def to_micros(value: Decimal) -> int:
@@ -166,7 +202,9 @@ def signal_arg(s: SignalResult) -> dict[str, Any]:
 
 class IngestMarketHandler:
     kind = "ingest_market"
-    lease_seconds = 120
+    lane = "system"
+    # About 125 tickers at the Finnhub plan rate take roughly two minutes of quote calls.
+    lease_seconds = 300
 
     def __init__(
         self,
@@ -199,9 +237,25 @@ class IngestMarketHandler:
         last_completed = cal.last_completed_session(started)
         await self._sync_universe(gateway)
 
-        # Quotes: one request per ticker per run, shared by every user.
+        # Quotes: one request per ticker per run, shared by every user. History comes from a
+        # different provider, so both are fetched at the same time.
         tickers = self._universe.all_tickers
-        fetched = await asyncio.gather(*(provider.get_quote(t) for t in tickers), return_exceptions=True)
+        active = await provider.history_source()
+        score_through = last_completed
+        if active in ("alpaca_sip", "alpaca_iex"):
+            score_through = session_safe_for_historical_sip(cal, started)
+        stored: dict[str, dict[date, DailyBar]] = defaultdict(dict)
+        for row in await gateway.worker_daily_bars():
+            stored[row.ticker][date.fromisoformat(row.session_date)] = from_stored(row)
+        history_tickers = self._history_tickers(tickers, stored) if active is not None else []
+        start = score_through - timedelta(days=self._history_days)
+        fetched, fetched_hist = await asyncio.gather(
+            asyncio.gather(*(provider.get_quote(t) for t in tickers), return_exceptions=True),
+            asyncio.gather(
+                *(provider.get_daily_bars(t, start, score_through) for t in history_tickers),
+                return_exceptions=True,
+            ),
+        )
         errors = [r for r in fetched if isinstance(r, BaseException)]
         if len(errors) == len(tickers):
             first = errors[0]
@@ -228,10 +282,7 @@ class IngestMarketHandler:
             quotes[ticker] = result
 
         # History stays on one source. Alpaca bars are not filled with Finnhub quotes.
-        active = await provider.history_source()
-        score_through = last_completed
         if active in ("alpaca_sip", "alpaca_iex"):
-            score_through = session_safe_for_historical_sip(cal, started)
             for eq in self._universe.equities:
                 notes[eq.ticker].append(f"history_source:{active}")
                 notes[eq.ticker].append("adjustment:split")
@@ -241,22 +292,16 @@ class IngestMarketHandler:
             for eq in self._universe.equities:
                 notes[eq.ticker].append(f"history_source:{active}")
 
-        stored: dict[str, dict[date, DailyBar]] = defaultdict(dict)
-        for row in await gateway.worker_daily_bars():
-            stored[row.ticker][date.fromisoformat(row.session_date)] = from_stored(row)
         incoming: list[DailyBar] = []
         if active is not None:
-            start = score_through - timedelta(days=self._history_days)
-            fetched_hist = await asyncio.gather(
-                *(provider.get_daily_bars(t, start, score_through) for t in tickers),
-                return_exceptions=True,
+            for ticker in set(tickers) - set(history_tickers):
+                notes[ticker].append("history_backfill_pending")
+            admitted, held = admit_history(
+                history_tickers, list(fetched_hist), {t for t in history_tickers if stored.get(t)}
             )
-            for ticker, history in zip(tickers, fetched_hist, strict=True):
-                if isinstance(history, BaseException):
-                    code = history.code if isinstance(history, ProviderError) else "internal_error"
-                    notes[ticker].append(f"history_unavailable:{code}")
-                    continue
-                incoming.extend(history)
+            incoming.extend(admitted)
+            for ticker, note in held.items():
+                notes[ticker].append(note)
         else:
             for q in quotes.values():
                 incoming.extend(bars_from_quote(q, started, cal))
@@ -341,22 +386,48 @@ class IngestMarketHandler:
                 ]
             )
 
+    def _history_tickers(self, tickers: list[str], stored: dict[str, dict[date, DailyBar]]) -> list[str]:
+        """Every ticker with stored history, plus the next few that still need a backfill."""
+        benchmarks = {b.ticker for b in self._universe.benchmarks}
+        known = [t for t in tickers if stored.get(t)]
+        # Benchmarks first: every equity's relative features depend on one.
+        missing = sorted((t for t in tickers if not stored.get(t)), key=lambda t: t not in benchmarks)
+        return known + missing[:BACKFILL_TICKERS_PER_RUN]
+
     async def _sync_universe(self, gateway: SpacetimeGateway) -> None:
+        existing = {s.ticker: s for s in await gateway.stocks()}
         profiles: dict[str, CompanyProfile | None] = {}
         if await self._provider.has("company_profile"):
-            for eq in self._universe.equities:
+            # A stored profile (an exchange is only ever set from one) is reused; the rest are
+            # fetched a batch at a time so a larger universe does not stall one run.
+            needed = [
+                eq.ticker
+                for eq in self._universe.equities
+                if eq.ticker not in existing or not existing[eq.ticker].exchange
+            ]
+            for ticker in needed[:PROFILE_FETCHES_PER_RUN]:
                 try:
-                    profiles[eq.ticker] = await self._provider.get_profile(eq.ticker)
+                    profiles[ticker] = await self._provider.get_profile(ticker)
                 except ProviderError:
-                    profiles[eq.ticker] = None
+                    profiles[ticker] = None
         desired: list[dict[str, Any]] = []
         order = 0
         for eq in self._universe.equities:
             p = profiles.get(eq.ticker)
+            prior = existing.get(eq.ticker)
+            if p is None and prior is not None and prior.exchange:
+                p = CompanyProfile(
+                    ticker=eq.ticker,
+                    name=prior.name,
+                    exchange=prior.exchange,
+                    industry=prior.industry,
+                    currency=prior.currency,
+                    logo_url=prior.logo_url,
+                )
             desired.append(
                 {
                     "ticker": eq.ticker,
-                    "name": p.name if p else eq.ticker,
+                    "name": p.name if p else (eq.name or eq.ticker),
                     "exchange": p.exchange if p else "",
                     "industry": p.industry if p else "",
                     "sector": eq.sector,
@@ -377,11 +448,7 @@ class IngestMarketHandler:
                 }
             )
             order += 1
-        current = {
-            s.ticker: {k: getattr(s, k) for k in desired[0]}
-            for s in await gateway.stocks()
-            if s.active
-        }
+        current = {s.ticker: {k: getattr(s, k) for k in desired[0]} for s in existing.values() if s.active}
         if current != {d["ticker"]: d for d in desired}:
             await gateway.upsert_stocks(desired)
 

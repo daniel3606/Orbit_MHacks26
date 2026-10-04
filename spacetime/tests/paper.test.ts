@@ -369,7 +369,7 @@ describe('paper orders', () => {
     const queued = await waitFor('rebind submit job', () =>
       [...svc.conn.db.workerJobs.iter()].find(row => row.requestKey === 'orbit-rebind001' && row.status === 'queued')
     );
-    await svc.conn.reducers.requestPaperReconcile();
+    await svc.conn.reducers.requestPaperReconcile({});
 
     await rejectsWith(
       demo.conn.reducers.rebindPaperDemo({ identity: other.conn.identity! }),

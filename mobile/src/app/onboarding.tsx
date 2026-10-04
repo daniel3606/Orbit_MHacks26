@@ -122,7 +122,7 @@ export default function OnboardingScreen() {
             <Row label="Sectors" value={draft.sectorInterests.map(s => labelFor(SECTORS, s)).join(', ')} />
             <Row label="Experience" value={labelFor(EXPERIENCE_LEVEL, draft.experienceLevel)} />
             <Row label="Goal" value={labelFor(PRIMARY_GOAL, draft.primaryGoal)} />
-            <Row label="Sign (look only)" value={draft.zodiacSign ? labelFor(ZODIAC_SIGNS, draft.zodiacSign) : 'None'} />
+            <Row label="Sign (daily theme)" value={draft.zodiacSign ? labelFor(ZODIAC_SIGNS, draft.zodiacSign) : 'None'} />
           </Card>
           {error ? <Banner tone="danger" title="Not saved" body={error} /> : null}
           {!live ? <T variant="caption" muted>Saving is available once Orbit is connected.</T> : null}

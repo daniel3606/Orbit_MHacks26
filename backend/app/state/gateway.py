@@ -16,6 +16,8 @@ from pydantic import BaseModel, SecretStr, ValidationError
 
 from app.state.dto import (
     DailyBarV1,
+    DailyDiscoveryItemV1,
+    DailyDiscoveryV1,
     InvestmentProfileV1,
     JobV1,
     MarketGenerationV1,
@@ -224,6 +226,15 @@ class SpacetimeGateway:
 
     async def request_paper_reconcile(self) -> None:
         await self.call_reducer("request_paper_reconcile", [])
+
+    async def worker_discovery_history(self) -> list[DailyDiscoveryV1]:
+        return self._parse(DailyDiscoveryV1, await self._view("worker_discovery_history"))
+
+    async def worker_discovery_items(self) -> list[DailyDiscoveryItemV1]:
+        return self._parse(DailyDiscoveryItemV1, await self._view("worker_discovery_items"))
+
+    async def publish_daily_discovery(self, args: Sequence[Any]) -> None:
+        await self.call_reducer("publish_daily_discovery", list(args))
 
     async def worker_assistant_messages(self) -> list[dict[str, Any]]:
         return await self._view("worker_assistant_messages")

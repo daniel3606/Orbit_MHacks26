@@ -1,6 +1,86 @@
 # Implementation status
 
-_Last updated: 2026-10-03 · PRD phases 0–2, personalized discovery (fit-v1.0.0), and paper orders on one bound Alpaca paper account_
+_Last updated: 2026-10-04 · PRD phases 0–2, personalized matches (fit-v1.0.0), Daily Discovery (discovery-v1.0.0), and paper orders on one bound Alpaca paper account_
+
+## Daily Discovery (discovery-v1.0.0, 2026-10-04)
+
+The Discover tab now shows one Discovery set per person per local day: the sign picks which corner of the market to
+explore, and real market data, news, the saved profile and the person's own history pick the companies. The sign is
+never a scoring input, and nothing in the copy says it predicts returns.
+
+### Pipeline
+
+1. **Theme.** `app/discovery/rotation.py`. Each sign has four theme sectors (`discovery_themes.json`). Sectors are
+   ordered by `sha256(date | sign | sector)` and sub-themes by `sha256(date | sign | sub-theme)`, so the order is fixed
+   for a day and not a plain sequence. The person's history skips yesterday's sub-theme and any sector already used
+   twice in the last 6 days, when another option exists. No sign uses a neutral pool of six sectors.
+2. **Candidates.** The sub-theme's curated companies (4–6, all in the ingestion universe). A company without a valid
+   quote is skipped. A theme with fewer than two priced companies hands over to the next theme in the day's order.
+3. **Score.** `DiscoveryScore = 0.30·Trend + 0.25·PersonalFit + 0.20·News + 0.15·Momentum + 0.10·Novelty`
+   (`app/discovery/config.py`), renormalized over the components that have data. Time horizon shifts 0.05 between
+   momentum and fit.
+   - Trend: the published Trend Score / 100, only when it belongs to the current market generation.
+   - Momentum: last-session move (±4% spans 0–1) averaged with the clipped `relative_momentum` z-score.
+   - News: Finnhub company news from the last 3 days, kept only when the headline names the company or one of its
+     brands; recency-weighted (36 h half-life). A failed call leaves the component out; a successful call with no
+     stories scores 0.
+   - Personal fit: curated traits (size, risk, character, familiarity) against risk, style, horizon, experience and
+     saved sectors. These are heuristics, not fundamentals.
+   - Novelty: 0 when shown in the last 7 days, 0.4 within 30 days, 1 otherwise.
+4. **Select.** Companies shown in the last 7 days are held back while new ones remain. A later card takes a new
+   angle (e.g. nuclear instead of a third solar name) when it scores within 0.12 of the best repeat.
+5. **Explain.** One or two factual lines per card ("Matches your interest in growing companies", "In the news: 3
+   stories in the last 3 days"), varied across the set. No line predicts a price.
+
+### State
+
+- `daily_discovery` (owner, local date, sign, sector, sub-theme, title, description, versions, counts) and
+  `daily_discovery_item` (ticker, rank, score and components, angle, about, reasons, top relevant headline). The
+  reducer enforces one set per (owner, date); a published set is never rebuilt. The 45 most recent sets are kept and
+  double as discovery history.
+- `request_daily_discovery(localDate)`: caller is `ctx.sender`; the date must be "today" somewhere on Earth
+  (UTC−12…UTC+14). One active job per person; at most six requests per day. The sign comes from the caller's own
+  branding row, and a sign saved before a queued job starts is the one it uses.
+- `publish_daily_discovery`: service-only, under the job lease; validates everything, then writes the set and completes
+  the job in one transaction.
+- Views: `my_daily_discovery`, `my_discovery_items` (caller only); `worker_discovery_history`,
+  `worker_discovery_items` (only the owners of Discovery jobs the calling worker holds).
+- FastAPI still has no user-authenticated routes, so there is no `GET /discovery/today`; the reducer + views above are
+  that endpoint in this architecture.
+
+### Infrastructure changes that came with it
+
+- Universe grew from 11 to 114 equities (+XLRE). First backfills are capped at 4,500 bars per publish: a 9.5k-bar
+  publish was rejected with HTTP 413. Profiles are fetched 30 per run and then reused.
+- Ingestion lease 120 → 300 s. On 2026-10-04 a run took 2 min 56 s (124 quotes, 4,452 new bars, 114 signals, 24 scored
+  while history backfills).
+- The worker no longer waits for every job in a batch before polling again, and ingestion has its own lane, so a long
+  ingest cannot hold up Discovery, briefs or chat. Finnhub's budget is split (`FINNHUB_INTERACTIVE_CALLS_PER_MINUTE`).
+
+### Verified
+
+| Behavior | How |
+|---|---|
+| Same date + sign → same theme; dates rotate through every sector within 30 days; not sequential; ≥6 distinct themes across signs each day | `backend/tests/test_discovery.py` |
+| 40-day simulation: never yesterday's sub-theme, never a sector 3× in a 6-day window | same |
+| Different profiles rank the same theme differently; seen-recently ranks lower; last week's names held back; new angle preferred | same |
+| News outage leaves the component out; irrelevant headlines dropped; one missing quote skips one company; no market data retries | same |
+| Handler: publishes 3 companies of today's theme, falls through to the next theme, never rebuilds a day, uses history next day | same, in-memory gateway |
+| Slow ingest does not block quick jobs; system lane | `backend/tests/test_runner.py` |
+| Backfill budget | `test_first_backfills_stay_inside_one_publish_budget` |
+| Date bounds, one job per day with the stored sign, consumer cannot publish, invalid sets write nothing, same day never rebuilt, other users see nothing, next day gets a new set, worker sees only leased owner's history, sign change re-points a queued job | `spacetime/tests/discovery.test.ts` |
+| Live: no-sign guest → `life-in-the-cloud` (GOOGL, AMZN, MSFT) in ~230 ms; Aquarius guest → `powering-the-future` (TSLA battery storage, FSLR solar, GEV grid & wind) | worker on `orbit-dev` |
+| On device: constellation header, theme, cards with logos, live prices, reasons, footnote, missing-logo monogram, card → stock detail with the same reasons | iPhone 17 Pro (402 pt, no sign) and iPhone 16e (390 pt, Aquarius) simulators |
+
+### Not verified or still open
+
+- Error state, negative and flat price moves, and widths above 430 pt (Pro Max) were not seen on a device; the code
+  paths are written but only the populated and loading states were observed.
+- The first no-sign set was published before ORCL/NET had quotes, so it shows three "Cloud platform" companies.
+  Diversity only works on companies that have prices.
+- News for Discovery waits at most 8 s per company; on a busy key the news component is left out rather than delayed.
+- Curated traits and blurbs are hand-written heuristics; there are no fundamentals behind "growth" or "established".
+- There is no analytics provider in the app, so no Discovery events are recorded.
 
 ## Approved provider change (2026-10-03)
 

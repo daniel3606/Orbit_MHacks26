@@ -77,9 +77,24 @@ and the worker token allowlisted).
   create or change the schedule once as admin:
   `spacetime call --no-config orbit-dev --server local configure_market_schedule 300`.
 - `make ingest-now` runs ingestion immediately. Overlapping requests coalesce into one active job.
-- Universe: [backend/app/config/universe.json](backend/app/config/universe.json) lists 11 equities, each with a
-  SPDR sector ETF benchmark, and SPY as the fallback. Settings: [backend/app/signals/config.py](backend/app/signals/config.py)
-  (`trend-v1.0.0`).
+- Universe: [backend/app/config/universe.json](backend/app/config/universe.json) lists 114 well-known US-listed
+  equities, each with a SPDR sector ETF benchmark (XLRE added for real estate), and SPY as the fallback. Settings:
+  [backend/app/signals/config.py](backend/app/signals/config.py) (`trend-v1.0.0`). New tickers backfill history a few
+  per run (`BACKFILL_BAR_BUDGET` in `app/market/ingest.py` keeps each publish under SpacetimeDB's ~2 MB request limit),
+  and company profiles are fetched once and then reused. Ingestion runs on its own worker lane.
+- Finnhub's per-minute budget is split: `FINNHUB_INTERACTIVE_CALLS_PER_MINUTE` (default 10) is kept for news that a
+  person is waiting on (Discovery, briefs, chat); ingestion uses the rest of `FINNHUB_CALLS_PER_MINUTE`.
+
+### Daily Discovery
+
+- The Discover tab requests `request_daily_discovery(localDate)`; the worker's `daily_discovery` job picks today's
+  theme from the sign and publishes one set per person per local day through `publish_daily_discovery`. Reopening the
+  tab the same day shows the same companies with live prices.
+- Themes, sub-themes, candidate companies and their curated traits:
+  [backend/app/config/discovery_themes.json](backend/app/config/discovery_themes.json). Weights and windows:
+  [backend/app/discovery/config.py](backend/app/discovery/config.py) (`discovery-v1.0.0`).
+- Constellation art is rasterized from the Figma exports in `mobile/assets/images/constellations/source/`:
+  `node mobile/scripts/rasterize-constellations.mjs` (needs Google Chrome).
 - Fixture data is rejected unless an admin runs `set_service_flag "allow_fixture_data" true`. Only the tests do
   this, and only on `orbit-test`.
 

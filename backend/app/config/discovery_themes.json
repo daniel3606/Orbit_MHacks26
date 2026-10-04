@@ -1,0 +1,631 @@
+{
+  "version": "themes-v1",
+  "notes": "Discovery navigation only. Zodiac picks which corner of the market to explore; it is never an input to any score. Each sign lists theme sectors; each sector has one or more sub-themes; each sub-theme lists universe tickers with an `angle` (shown on the card and used to keep the daily set varied). Company traits are curated heuristics for personal fit, not fundamentals.",
+  "zodiac": {
+    "aries": ["technology", "defense", "energy", "sports"],
+    "taurus": ["consumer", "real_estate", "food", "finance"],
+    "gemini": ["communication", "media", "software", "internet"],
+    "cancer": ["healthcare", "consumer_staples", "housing", "wellness"],
+    "leo": ["entertainment", "luxury", "media", "gaming"],
+    "virgo": ["healthcare", "data", "enterprise_software", "logistics"],
+    "libra": ["fashion", "beauty", "fintech", "social_platforms"],
+    "scorpio": ["cybersecurity", "biotech", "defense", "energy"],
+    "sagittarius": ["travel", "aerospace", "ev", "international_markets"],
+    "capricorn": ["finance", "industrials", "infrastructure", "enterprise_software"],
+    "aquarius": ["ai", "robotics", "clean_energy", "semiconductors"],
+    "pisces": ["entertainment", "healthcare", "gaming", "creative_technology"]
+  },
+  "fallback_sectors": ["technology", "consumer", "healthcare", "finance", "energy", "entertainment"],
+  "sectors": {
+    "technology": { "name": "Technology", "subthemes": ["tech-you-carry", "life-in-the-cloud"] },
+    "defense": { "name": "Defense", "subthemes": ["built-to-protect"] },
+    "energy": { "name": "Energy", "subthemes": ["fueling-the-world", "keeping-the-lights-on"] },
+    "sports": { "name": "Sports", "subthemes": ["game-day"] },
+    "consumer": { "name": "Consumer", "subthemes": ["future-of-shopping"] },
+    "real_estate": { "name": "Real Estate", "subthemes": ["places-we-use"] },
+    "food": { "name": "Food", "subthemes": ["food-we-love"] },
+    "finance": { "name": "Finance", "subthemes": ["where-money-lives"] },
+    "communication": { "name": "Communication", "subthemes": ["staying-connected"] },
+    "media": { "name": "Media", "subthemes": ["stories-on-every-screen"] },
+    "software": { "name": "Software", "subthemes": ["software-everywhere"] },
+    "internet": { "name": "Internet", "subthemes": ["building-the-internet"] },
+    "healthcare": { "name": "Healthcare", "subthemes": ["future-of-medicine", "care-close-to-home"] },
+    "consumer_staples": { "name": "Consumer Staples", "subthemes": ["everyday-essentials"] },
+    "housing": { "name": "Housing", "subthemes": ["home-sweet-home"] },
+    "wellness": { "name": "Wellness", "subthemes": ["feeling-good"] },
+    "entertainment": { "name": "Entertainment", "subthemes": ["front-row-seats"] },
+    "luxury": { "name": "Luxury", "subthemes": ["everyday-luxury"] },
+    "gaming": { "name": "Gaming", "subthemes": ["worlds-you-can-play"] },
+    "data": { "name": "Data", "subthemes": ["data-economy"] },
+    "enterprise_software": { "name": "Enterprise Software", "subthemes": ["software-behind-business"] },
+    "logistics": { "name": "Logistics", "subthemes": ["moving-the-world"] },
+    "fashion": { "name": "Fashion", "subthemes": ["what-we-wear"] },
+    "beauty": { "name": "Beauty", "subthemes": ["beauty-business"] },
+    "fintech": { "name": "Fintech", "subthemes": ["smarter-money"] },
+    "social_platforms": { "name": "Social Platforms", "subthemes": ["where-people-gather"] },
+    "cybersecurity": { "name": "Cybersecurity", "subthemes": ["digital-defense"] },
+    "biotech": { "name": "Biotech", "subthemes": ["rewriting-biology"] },
+    "travel": { "name": "Travel", "subthemes": ["going-places"] },
+    "aerospace": { "name": "Aerospace", "subthemes": ["taking-flight", "life-beyond-earth"] },
+    "ev": { "name": "Electric Vehicles", "subthemes": ["electric-road"] },
+    "international_markets": { "name": "International Markets", "subthemes": ["around-the-world"] },
+    "industrials": { "name": "Industrials", "subthemes": ["building-big-things"] },
+    "infrastructure": { "name": "Infrastructure", "subthemes": ["backbone-of-modern-life"] },
+    "ai": { "name": "Artificial Intelligence", "subthemes": ["machines-that-think"] },
+    "robotics": { "name": "Robotics", "subthemes": ["robots-at-work"] },
+    "clean_energy": { "name": "Clean Energy", "subthemes": ["powering-the-future"] },
+    "semiconductors": { "name": "Semiconductors", "subthemes": ["tiny-chips-big-world"] },
+    "creative_technology": { "name": "Creative Technology", "subthemes": ["tools-for-creators"] }
+  },
+  "subthemes": {
+    "tech-you-carry": {
+      "title": "The Tech You Carry",
+      "description": "Explore the companies behind the phone in your pocket and the laptop in your bag.",
+      "companies": [
+        { "ticker": "AAPL", "angle": "Phones & laptops" },
+        { "ticker": "QCOM", "angle": "Phone chips" },
+        { "ticker": "GOOGL", "angle": "Android & search" },
+        { "ticker": "MSFT", "angle": "PC software" },
+        { "ticker": "ARM", "angle": "Chip blueprints" }
+      ]
+    },
+    "life-in-the-cloud": {
+      "title": "Life in the Cloud",
+      "description": "Explore the companies running the servers behind almost every app you use.",
+      "companies": [
+        { "ticker": "AMZN", "angle": "Cloud platform" },
+        { "ticker": "MSFT", "angle": "Cloud platform" },
+        { "ticker": "GOOGL", "angle": "Cloud platform" },
+        { "ticker": "ORCL", "angle": "Databases" },
+        { "ticker": "NET", "angle": "Network edge" }
+      ]
+    },
+    "built-to-protect": {
+      "title": "Built to Protect",
+      "description": "Explore companies building aircraft, systems and software for national defense.",
+      "companies": [
+        { "ticker": "LMT", "angle": "Fighter jets" },
+        { "ticker": "RTX", "angle": "Missile defense" },
+        { "ticker": "NOC", "angle": "Stealth & space" },
+        { "ticker": "PLTR", "angle": "Defense software" }
+      ]
+    },
+    "fueling-the-world": {
+      "title": "Fueling the World",
+      "description": "Explore the companies that find, produce and refine the world's oil and gas.",
+      "companies": [
+        { "ticker": "XOM", "angle": "Oil & gas" },
+        { "ticker": "CVX", "angle": "Oil & gas" },
+        { "ticker": "COP", "angle": "Exploration" },
+        { "ticker": "SLB", "angle": "Oilfield services" }
+      ]
+    },
+    "keeping-the-lights-on": {
+      "title": "Keeping the Lights On",
+      "description": "Explore companies generating electricity and building the grid that carries it.",
+      "companies": [
+        { "ticker": "NEE", "angle": "Utilities" },
+        { "ticker": "CEG", "angle": "Nuclear power" },
+        { "ticker": "GEV", "angle": "Power equipment" },
+        { "ticker": "PWR", "angle": "Grid construction" }
+      ]
+    },
+    "game-day": {
+      "title": "Game Day",
+      "description": "Explore the brands behind the gear, the fights and the broadcasts.",
+      "companies": [
+        { "ticker": "NKE", "angle": "Sportswear" },
+        { "ticker": "ONON", "angle": "Running shoes" },
+        { "ticker": "TKO", "angle": "Live sports" },
+        { "ticker": "LULU", "angle": "Activewear" },
+        { "ticker": "DIS", "angle": "Sports TV" }
+      ]
+    },
+    "future-of-shopping": {
+      "title": "The Future of Shopping",
+      "description": "Explore companies changing how people browse, buy and get things delivered.",
+      "companies": [
+        { "ticker": "AMZN", "angle": "Online shopping" },
+        { "ticker": "COST", "angle": "Warehouse clubs" },
+        { "ticker": "WMT", "angle": "Everyday retail" },
+        { "ticker": "SHOP", "angle": "Online storefronts" },
+        { "ticker": "MELI", "angle": "Latin American e-commerce" }
+      ]
+    },
+    "places-we-use": {
+      "title": "Owning the Places We Use",
+      "description": "Explore companies that own warehouses, cell towers and data centers.",
+      "companies": [
+        { "ticker": "PLD", "angle": "Warehouses" },
+        { "ticker": "AMT", "angle": "Cell towers" },
+        { "ticker": "EQIX", "angle": "Data centers" },
+        { "ticker": "O", "angle": "Retail buildings" }
+      ]
+    },
+    "food-we-love": {
+      "title": "Food We Love",
+      "description": "Explore companies turning everyday cravings into global brands.",
+      "companies": [
+        { "ticker": "MCD", "angle": "Fast food" },
+        { "ticker": "SBUX", "angle": "Coffee" },
+        { "ticker": "HSY", "angle": "Chocolate" },
+        { "ticker": "PEP", "angle": "Snacks & drinks" },
+        { "ticker": "KO", "angle": "Drinks" }
+      ]
+    },
+    "where-money-lives": {
+      "title": "Where Money Lives",
+      "description": "Explore the banks, payment networks and investment firms that move money.",
+      "companies": [
+        { "ticker": "JPM", "angle": "Banking" },
+        { "ticker": "BAC", "angle": "Banking" },
+        { "ticker": "BLK", "angle": "Investing" },
+        { "ticker": "V", "angle": "Payments" },
+        { "ticker": "MA", "angle": "Payments" }
+      ]
+    },
+    "staying-connected": {
+      "title": "Staying Connected",
+      "description": "Explore companies building the networks that keep phones and homes online.",
+      "companies": [
+        { "ticker": "T", "angle": "Wireless" },
+        { "ticker": "VZ", "angle": "Wireless" },
+        { "ticker": "TMUS", "angle": "Wireless" },
+        { "ticker": "ANET", "angle": "Networking gear" },
+        { "ticker": "QCOM", "angle": "Modem chips" }
+      ]
+    },
+    "stories-on-every-screen": {
+      "title": "Stories on Every Screen",
+      "description": "Explore companies bringing shows, music and video to every screen.",
+      "companies": [
+        { "ticker": "NFLX", "angle": "Streaming" },
+        { "ticker": "DIS", "angle": "Studios" },
+        { "ticker": "SPOT", "angle": "Audio" },
+        { "ticker": "GOOGL", "angle": "YouTube" },
+        { "ticker": "SONY", "angle": "Film & music" }
+      ]
+    },
+    "software-everywhere": {
+      "title": "Software Everywhere",
+      "description": "Explore companies making the apps people use to work, create and manage money.",
+      "companies": [
+        { "ticker": "MSFT", "angle": "Office software" },
+        { "ticker": "ADBE", "angle": "Creative software" },
+        { "ticker": "CRM", "angle": "Sales software" },
+        { "ticker": "INTU", "angle": "Money software" },
+        { "ticker": "SHOP", "angle": "Commerce software" }
+      ]
+    },
+    "building-the-internet": {
+      "title": "Building the Internet",
+      "description": "Explore companies laying the digital roads the internet runs on.",
+      "companies": [
+        { "ticker": "NET", "angle": "Web speed & security" },
+        { "ticker": "ANET", "angle": "Data center networking" },
+        { "ticker": "AMZN", "angle": "Cloud" },
+        { "ticker": "GOOGL", "angle": "Search" },
+        { "ticker": "EQIX", "angle": "Data centers" }
+      ]
+    },
+    "future-of-medicine": {
+      "title": "Future of Medicine",
+      "description": "Explore companies developing new treatments and new tools for surgery.",
+      "companies": [
+        { "ticker": "LLY", "angle": "New medicines" },
+        { "ticker": "NVO", "angle": "New medicines" },
+        { "ticker": "VRTX", "angle": "Gene therapies" },
+        { "ticker": "ISRG", "angle": "Robotic surgery" },
+        { "ticker": "REGN", "angle": "Antibody drugs" }
+      ]
+    },
+    "care-close-to-home": {
+      "title": "Care Close to Home",
+      "description": "Explore companies shaping how people pay for, track and receive care.",
+      "companies": [
+        { "ticker": "UNH", "angle": "Health insurance" },
+        { "ticker": "JNJ", "angle": "Medicines & devices" },
+        { "ticker": "DXCM", "angle": "Glucose monitors" },
+        { "ticker": "HIMS", "angle": "Telehealth" }
+      ]
+    },
+    "everyday-essentials": {
+      "title": "Everyday Essentials",
+      "description": "Explore companies behind the products in nearly every shopping cart.",
+      "companies": [
+        { "ticker": "PG", "angle": "Household brands" },
+        { "ticker": "KO", "angle": "Drinks" },
+        { "ticker": "PEP", "angle": "Snacks & drinks" },
+        { "ticker": "COST", "angle": "Warehouse clubs" },
+        { "ticker": "WMT", "angle": "Everyday retail" }
+      ]
+    },
+    "home-sweet-home": {
+      "title": "Home Sweet Home",
+      "description": "Explore companies that build, fix and furnish the places people live.",
+      "companies": [
+        { "ticker": "HD", "angle": "Home improvement" },
+        { "ticker": "LOW", "angle": "Home improvement" },
+        { "ticker": "DHI", "angle": "Homebuilding" },
+        { "ticker": "LEN", "angle": "Homebuilding" }
+      ]
+    },
+    "feeling-good": {
+      "title": "Feeling Good",
+      "description": "Explore companies built around movement, health tracking and self-care.",
+      "companies": [
+        { "ticker": "LULU", "angle": "Activewear" },
+        { "ticker": "HIMS", "angle": "Telehealth" },
+        { "ticker": "DXCM", "angle": "Health tracking" },
+        { "ticker": "ONON", "angle": "Running shoes" }
+      ]
+    },
+    "front-row-seats": {
+      "title": "Front Row Seats",
+      "description": "Explore companies behind concerts, theme parks and live events.",
+      "companies": [
+        { "ticker": "LYV", "angle": "Concerts" },
+        { "ticker": "DIS", "angle": "Theme parks" },
+        { "ticker": "NFLX", "angle": "Streaming" },
+        { "ticker": "SPOT", "angle": "Music" },
+        { "ticker": "TKO", "angle": "Live sports" }
+      ]
+    },
+    "everyday-luxury": {
+      "title": "Everyday Luxury",
+      "description": "Explore companies turning familiar consumer habits into global brands.",
+      "companies": [
+        { "ticker": "RACE", "angle": "Sports cars" },
+        { "ticker": "RL", "angle": "Fashion" },
+        { "ticker": "EL", "angle": "Prestige beauty" },
+        { "ticker": "LULU", "angle": "Premium activewear" }
+      ]
+    },
+    "worlds-you-can-play": {
+      "title": "Worlds You Can Play",
+      "description": "Explore the companies making games, consoles and the chips that power them.",
+      "companies": [
+        { "ticker": "RBLX", "angle": "Online worlds" },
+        { "ticker": "EA", "angle": "Sports games" },
+        { "ticker": "SONY", "angle": "PlayStation" },
+        { "ticker": "NVDA", "angle": "Graphics chips" },
+        { "ticker": "U", "angle": "Game engines" }
+      ]
+    },
+    "data-economy": {
+      "title": "The Data Economy",
+      "description": "Explore companies helping businesses store, search and make sense of data.",
+      "companies": [
+        { "ticker": "SNOW", "angle": "Data cloud" },
+        { "ticker": "PLTR", "angle": "Analytics" },
+        { "ticker": "ORCL", "angle": "Databases" },
+        { "ticker": "MSFT", "angle": "Data platforms" }
+      ]
+    },
+    "software-behind-business": {
+      "title": "The Software Behind Business",
+      "description": "Explore companies whose software runs sales, finance and operations.",
+      "companies": [
+        { "ticker": "CRM", "angle": "Customer software" },
+        { "ticker": "NOW", "angle": "Workflow software" },
+        { "ticker": "SAP", "angle": "Business planning" },
+        { "ticker": "ORCL", "angle": "Databases" },
+        { "ticker": "INTU", "angle": "Small-business finance" }
+      ]
+    },
+    "moving-the-world": {
+      "title": "Moving the World",
+      "description": "Explore companies moving packages and freight across the country and the world.",
+      "companies": [
+        { "ticker": "UPS", "angle": "Parcels" },
+        { "ticker": "FDX", "angle": "Parcels" },
+        { "ticker": "UNP", "angle": "Railroads" },
+        { "ticker": "AMZN", "angle": "Delivery network" }
+      ]
+    },
+    "what-we-wear": {
+      "title": "What We Wear",
+      "description": "Explore the brands designing the clothes and shoes people reach for every day.",
+      "companies": [
+        { "ticker": "NKE", "angle": "Sportswear" },
+        { "ticker": "LULU", "angle": "Activewear" },
+        { "ticker": "RL", "angle": "Classic fashion" },
+        { "ticker": "ONON", "angle": "Running shoes" }
+      ]
+    },
+    "beauty-business": {
+      "title": "The Beauty Business",
+      "description": "Explore companies making and selling makeup, skincare and personal care.",
+      "companies": [
+        { "ticker": "EL", "angle": "Prestige beauty" },
+        { "ticker": "ELF", "angle": "Affordable makeup" },
+        { "ticker": "ULTA", "angle": "Beauty retail" },
+        { "ticker": "PG", "angle": "Personal care" }
+      ]
+    },
+    "smarter-money": {
+      "title": "Smarter Money",
+      "description": "Explore companies changing how people pay, send and manage money.",
+      "companies": [
+        { "ticker": "V", "angle": "Card networks" },
+        { "ticker": "MA", "angle": "Card networks" },
+        { "ticker": "PYPL", "angle": "Digital wallets" },
+        { "ticker": "XYZ", "angle": "Cash App & Square" }
+      ]
+    },
+    "where-people-gather": {
+      "title": "Where People Gather Online",
+      "description": "Explore the platforms where people share, scroll and talk.",
+      "companies": [
+        { "ticker": "META", "angle": "Social apps" },
+        { "ticker": "PINS", "angle": "Visual discovery" },
+        { "ticker": "RDDT", "angle": "Communities" },
+        { "ticker": "GOOGL", "angle": "YouTube" }
+      ]
+    },
+    "digital-defense": {
+      "title": "Digital Defense",
+      "description": "Explore companies protecting businesses from hackers and online threats.",
+      "companies": [
+        { "ticker": "CRWD", "angle": "Device security" },
+        { "ticker": "PANW", "angle": "Network security" },
+        { "ticker": "ZS", "angle": "Cloud security" },
+        { "ticker": "NET", "angle": "Web protection" }
+      ]
+    },
+    "rewriting-biology": {
+      "title": "Rewriting Biology",
+      "description": "Explore biotech companies building medicines from genes and proteins.",
+      "companies": [
+        { "ticker": "VRTX", "angle": "Gene editing" },
+        { "ticker": "REGN", "angle": "Antibodies" },
+        { "ticker": "AMGN", "angle": "Biologics" },
+        { "ticker": "MRNA", "angle": "mRNA medicine" }
+      ]
+    },
+    "going-places": {
+      "title": "Going Places",
+      "description": "Explore companies behind flights, hotels and booking a trip.",
+      "companies": [
+        { "ticker": "BKNG", "angle": "Online travel" },
+        { "ticker": "ABNB", "angle": "Home stays" },
+        { "ticker": "MAR", "angle": "Hotels" },
+        { "ticker": "DAL", "angle": "Airlines" }
+      ]
+    },
+    "taking-flight": {
+      "title": "Taking Flight",
+      "description": "Explore companies building and flying the world's airplanes.",
+      "companies": [
+        { "ticker": "BA", "angle": "Passenger jets" },
+        { "ticker": "GE", "angle": "Jet engines" },
+        { "ticker": "RTX", "angle": "Aircraft systems" },
+        { "ticker": "DAL", "angle": "Airlines" }
+      ]
+    },
+    "life-beyond-earth": {
+      "title": "Life Beyond Earth",
+      "description": "Explore companies building rockets, spacecraft and satellites.",
+      "companies": [
+        { "ticker": "RKLB", "angle": "Rockets" },
+        { "ticker": "LMT", "angle": "Spacecraft" },
+        { "ticker": "NOC", "angle": "Space systems" },
+        { "ticker": "BA", "angle": "Space capsules" }
+      ]
+    },
+    "electric-road": {
+      "title": "The Electric Road",
+      "description": "Explore carmakers building the next generation of electric vehicles.",
+      "companies": [
+        { "ticker": "TSLA", "angle": "Electric cars" },
+        { "ticker": "RIVN", "angle": "Electric trucks" },
+        { "ticker": "GM", "angle": "Going electric" },
+        { "ticker": "F", "angle": "Going electric" }
+      ]
+    },
+    "around-the-world": {
+      "title": "Around the World",
+      "description": "Explore global companies you can find on US exchanges, from Taiwan to Denmark.",
+      "companies": [
+        { "ticker": "TSM", "angle": "Taiwan" },
+        { "ticker": "ASML", "angle": "Netherlands" },
+        { "ticker": "MELI", "angle": "Latin America" },
+        { "ticker": "SONY", "angle": "Japan" },
+        { "ticker": "NVO", "angle": "Denmark" },
+        { "ticker": "SAP", "angle": "Germany" }
+      ]
+    },
+    "building-big-things": {
+      "title": "Building Big Things",
+      "description": "Explore companies making the machines and equipment behind construction and farming.",
+      "companies": [
+        { "ticker": "CAT", "angle": "Construction machines" },
+        { "ticker": "DE", "angle": "Farm machines" },
+        { "ticker": "ETN", "angle": "Electrical gear" },
+        { "ticker": "GE", "angle": "Jet engines" }
+      ]
+    },
+    "backbone-of-modern-life": {
+      "title": "The Backbone of Modern Life",
+      "description": "Explore companies building power lines, railroads, towers and data centers.",
+      "companies": [
+        { "ticker": "PWR", "angle": "Grid construction" },
+        { "ticker": "AMT", "angle": "Cell towers" },
+        { "ticker": "EQIX", "angle": "Data centers" },
+        { "ticker": "CAT", "angle": "Heavy equipment" },
+        { "ticker": "UNP", "angle": "Railroads" }
+      ]
+    },
+    "machines-that-think": {
+      "title": "Machines That Think",
+      "description": "Explore companies building the infrastructure behind modern AI.",
+      "companies": [
+        { "ticker": "NVDA", "angle": "AI chips" },
+        { "ticker": "AMD", "angle": "AI chips" },
+        { "ticker": "AVGO", "angle": "AI networking" },
+        { "ticker": "ARM", "angle": "Chip blueprints" },
+        { "ticker": "MSFT", "angle": "AI platforms" },
+        { "ticker": "PLTR", "angle": "AI software" }
+      ]
+    },
+    "robots-at-work": {
+      "title": "Robots at Work",
+      "description": "Explore companies putting robots in operating rooms, factories and fields.",
+      "companies": [
+        { "ticker": "ISRG", "angle": "Surgical robots" },
+        { "ticker": "ROK", "angle": "Factory automation" },
+        { "ticker": "TER", "angle": "Collaborative robots" },
+        { "ticker": "DE", "angle": "Self-driving tractors" }
+      ]
+    },
+    "powering-the-future": {
+      "title": "Powering the Future",
+      "description": "Explore companies behind nuclear, solar, batteries and a stronger grid.",
+      "companies": [
+        { "ticker": "CEG", "angle": "Nuclear" },
+        { "ticker": "FSLR", "angle": "Solar" },
+        { "ticker": "GEV", "angle": "Grid & wind" },
+        { "ticker": "ETN", "angle": "Grid" },
+        { "ticker": "NEE", "angle": "Renewables" },
+        { "ticker": "TSLA", "angle": "Battery storage" }
+      ]
+    },
+    "tiny-chips-big-world": {
+      "title": "Tiny Chips, Big World",
+      "description": "Explore companies designing and manufacturing the chips inside everything.",
+      "companies": [
+        { "ticker": "TSM", "angle": "Chip manufacturing" },
+        { "ticker": "NVDA", "angle": "Chip design" },
+        { "ticker": "QCOM", "angle": "Mobile chips" },
+        { "ticker": "ASML", "angle": "Chip-making machines" },
+        { "ticker": "AMD", "angle": "Chip design" }
+      ]
+    },
+    "tools-for-creators": {
+      "title": "Tools for Creators",
+      "description": "Explore companies making the tools people use to design, build and publish.",
+      "companies": [
+        { "ticker": "ADBE", "angle": "Design & photo" },
+        { "ticker": "U", "angle": "Game engines" },
+        { "ticker": "SPOT", "angle": "Podcasts & music" },
+        { "ticker": "AAPL", "angle": "Creative devices" }
+      ]
+    }
+  },
+  "companies": {
+    "AAPL": { "names": ["Apple", "iPhone"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Makes the iPhone, Mac and the apps and services around them." },
+    "MSFT": { "names": ["Microsoft", "Azure"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Makes Windows, Office and the Azure cloud many businesses run on." },
+    "GOOGL": { "names": ["Alphabet", "Google", "YouTube"], "size": "mega", "risk": "medium", "familiarity": "high", "character": "established", "about": "Owns Google Search, YouTube, Android and Google Cloud." },
+    "AMZN": { "names": ["Amazon", "AWS"], "size": "mega", "risk": "medium", "familiarity": "high", "character": "established", "about": "Runs the Amazon store, Prime and AWS, a leading cloud platform." },
+    "META": { "names": ["Meta", "Facebook", "Instagram", "WhatsApp"], "size": "mega", "risk": "medium", "familiarity": "high", "character": "established", "about": "Owns Facebook, Instagram and WhatsApp." },
+    "NVDA": { "names": ["Nvidia"], "size": "mega", "risk": "higher", "familiarity": "high", "character": "growth", "about": "Designs the graphics chips that train and run most AI models." },
+    "AMD": { "names": ["AMD"], "size": "large", "risk": "higher", "familiarity": "medium", "character": "growth", "about": "Designs processors and graphics chips for PCs, consoles and data centers." },
+    "AVGO": { "names": ["Broadcom"], "size": "mega", "risk": "medium", "familiarity": "low", "character": "growth", "about": "Makes networking chips and custom AI chips used inside data centers." },
+    "ARM": { "names": ["Arm Holdings", "Arm"], "size": "large", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Licenses the chip designs inside nearly every smartphone." },
+    "QCOM": { "names": ["Qualcomm", "Snapdragon"], "size": "large", "risk": "medium", "familiarity": "medium", "character": "established", "about": "Designs the Snapdragon chips and modems in many Android phones." },
+    "TSM": { "names": ["TSMC", "Taiwan Semiconductor"], "size": "mega", "risk": "medium", "familiarity": "low", "character": "established", "about": "Manufactures chips in Taiwan for Apple, NVIDIA and many others." },
+    "ASML": { "names": ["ASML"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Builds the machines chipmakers use to print the most advanced chips." },
+    "ORCL": { "names": ["Oracle"], "size": "mega", "risk": "medium", "familiarity": "medium", "character": "established", "about": "Sells database software and cloud computing to large organizations." },
+    "CRM": { "names": ["Salesforce"], "size": "large", "risk": "medium", "familiarity": "medium", "character": "established", "about": "Makes software companies use to manage customers and sales." },
+    "ADBE": { "names": ["Adobe"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Makes Photoshop, Acrobat and other creative software." },
+    "NOW": { "names": ["ServiceNow"], "size": "large", "risk": "medium", "familiarity": "low", "character": "growth", "about": "Makes software that automates everyday work inside large companies." },
+    "PLTR": { "names": ["Palantir"], "size": "large", "risk": "higher", "familiarity": "medium", "character": "growth", "about": "Builds data-analysis software for governments and businesses." },
+    "SNOW": { "names": ["Snowflake"], "size": "large", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Runs a cloud platform where companies store and analyze data." },
+    "CRWD": { "names": ["CrowdStrike"], "size": "large", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Protects company computers and servers from cyberattacks." },
+    "PANW": { "names": ["Palo Alto Networks"], "size": "large", "risk": "medium", "familiarity": "low", "character": "growth", "about": "Sells firewalls and security software that protect company networks." },
+    "ZS": { "names": ["Zscaler"], "size": "mid", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Secures how employees connect to apps over the internet." },
+    "NET": { "names": ["Cloudflare"], "size": "large", "risk": "higher", "familiarity": "medium", "character": "growth", "about": "Runs a global network that makes websites faster and safer." },
+    "ANET": { "names": ["Arista"], "size": "large", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Makes the high-speed network switches inside data centers." },
+    "INTU": { "names": ["Intuit", "TurboTax", "QuickBooks"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Makes TurboTax, QuickBooks and Credit Karma." },
+    "SAP": { "names": ["SAP"], "size": "large", "risk": "lower", "familiarity": "low", "character": "established", "about": "Makes the planning and accounting software used by large companies worldwide." },
+    "SHOP": { "names": ["Shopify"], "size": "large", "risk": "higher", "familiarity": "medium", "character": "growth", "about": "Gives businesses the tools to run their own online stores." },
+    "U": { "names": ["Unity Software", "Unity"], "size": "mid", "risk": "higher", "familiarity": "low", "character": "emerging", "about": "Makes a game engine used to build many mobile and console games." },
+    "TER": { "names": ["Teradyne"], "size": "mid", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Makes chip-testing equipment and Universal Robots' collaborative robots." },
+    "FSLR": { "names": ["First Solar"], "size": "mid", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Manufactures solar panels in the United States." },
+    "NFLX": { "names": ["Netflix"], "size": "mega", "risk": "medium", "familiarity": "high", "character": "growth", "about": "Streams movies and series to subscribers around the world." },
+    "DIS": { "names": ["Disney", "ESPN", "Pixar", "Marvel"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Owns Disney parks, Pixar, Marvel, ESPN and Disney+." },
+    "SPOT": { "names": ["Spotify"], "size": "large", "risk": "higher", "familiarity": "high", "character": "growth", "about": "Streams music and podcasts to listeners around the world." },
+    "PINS": { "names": ["Pinterest"], "size": "mid", "risk": "higher", "familiarity": "high", "character": "growth", "about": "Runs a visual app where people save and discover ideas." },
+    "RDDT": { "names": ["Reddit"], "size": "mid", "risk": "higher", "familiarity": "high", "character": "emerging", "about": "Hosts online communities where people discuss almost anything." },
+    "T": { "names": ["AT&T"], "size": "large", "risk": "lower", "familiarity": "high", "character": "established", "about": "Provides wireless and home internet service in the US." },
+    "VZ": { "names": ["Verizon"], "size": "large", "risk": "lower", "familiarity": "high", "character": "established", "about": "Provides wireless and home internet service in the US." },
+    "TMUS": { "names": ["T-Mobile"], "size": "large", "risk": "lower", "familiarity": "high", "character": "established", "about": "Runs one of the largest 5G wireless networks in the US." },
+    "RBLX": { "names": ["Roblox"], "size": "large", "risk": "higher", "familiarity": "high", "character": "emerging", "about": "Runs an online platform where players build and share games." },
+    "EA": { "names": ["Electronic Arts"], "size": "large", "risk": "lower", "familiarity": "high", "character": "established", "about": "Makes games like EA Sports FC, Madden NFL and The Sims." },
+    "LYV": { "names": ["Live Nation", "Ticketmaster"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Promotes concerts and owns Ticketmaster." },
+    "TKO": { "names": ["TKO Group", "UFC", "WWE"], "size": "large", "risk": "medium", "familiarity": "medium", "character": "growth", "about": "Owns the UFC and WWE." },
+    "SONY": { "names": ["Sony", "PlayStation"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Makes PlayStation and owns music and movie studios." },
+    "TSLA": { "names": ["Tesla"], "size": "mega", "risk": "higher", "familiarity": "high", "character": "growth", "about": "Makes electric cars and large batteries for the power grid." },
+    "RIVN": { "names": ["Rivian"], "size": "mid", "risk": "higher", "familiarity": "medium", "character": "emerging", "about": "Makes electric pickup trucks, SUVs and delivery vans." },
+    "GM": { "names": ["General Motors", "GM"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Makes Chevrolet, GMC and Cadillac vehicles, including electric models." },
+    "F": { "names": ["Ford"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Makes F-Series trucks and the electric Mustang Mach-E." },
+    "NKE": { "names": ["Nike"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Designs athletic shoes and clothing." },
+    "LULU": { "names": ["Lululemon"], "size": "mid", "risk": "higher", "familiarity": "high", "character": "growth", "about": "Designs yoga and athletic clothing." },
+    "ONON": { "names": ["On Holding", "On Running"], "size": "mid", "risk": "higher", "familiarity": "medium", "character": "growth", "about": "Makes On running shoes and sportswear." },
+    "RL": { "names": ["Ralph Lauren"], "size": "mid", "risk": "medium", "familiarity": "high", "character": "established", "about": "Designs Polo and other classic clothing brands." },
+    "RACE": { "names": ["Ferrari"], "size": "large", "risk": "lower", "familiarity": "high", "character": "established", "about": "Builds Ferrari sports cars in deliberately limited numbers." },
+    "MCD": { "names": ["McDonald's", "McDonald"], "size": "large", "risk": "lower", "familiarity": "high", "character": "established", "about": "Runs the world's largest fast-food chain." },
+    "SBUX": { "names": ["Starbucks"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Runs coffeehouses in more than 80 countries." },
+    "HD": { "names": ["Home Depot"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "The largest home-improvement retailer in the US." },
+    "LOW": { "names": ["Lowe's", "Lowe"], "size": "large", "risk": "lower", "familiarity": "high", "character": "established", "about": "Sells tools, appliances and building supplies for homes." },
+    "DHI": { "names": ["D.R. Horton", "DR Horton"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Builds more new homes than any other US homebuilder." },
+    "LEN": { "names": ["Lennar"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Builds new homes across the United States." },
+    "BKNG": { "names": ["Booking Holdings", "Booking.com", "Priceline"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Owns Booking.com, Priceline and Kayak." },
+    "ABNB": { "names": ["Airbnb"], "size": "large", "risk": "medium", "familiarity": "high", "character": "growth", "about": "Runs a marketplace for home stays and experiences." },
+    "MAR": { "names": ["Marriott"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Runs Marriott, Ritz-Carlton and other hotel brands." },
+    "MELI": { "names": ["MercadoLibre", "Mercado Libre"], "size": "large", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Runs Latin America's largest online marketplace and payments app." },
+    "ULTA": { "names": ["Ulta"], "size": "mid", "risk": "medium", "familiarity": "high", "character": "established", "about": "Sells makeup, skincare and haircare in stores and online." },
+    "KO": { "names": ["Coca-Cola", "Coke"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Makes Coca-Cola, Sprite and hundreds of other drinks." },
+    "PEP": { "names": ["PepsiCo", "Pepsi"], "size": "large", "risk": "lower", "familiarity": "high", "character": "established", "about": "Makes Pepsi, Gatorade, Lay's and Doritos." },
+    "PG": { "names": ["Procter & Gamble", "P&G"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Makes Tide, Pampers, Gillette and other household brands." },
+    "COST": { "names": ["Costco"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Runs membership warehouse stores." },
+    "WMT": { "names": ["Walmart"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Runs the largest retail chain in the world." },
+    "HSY": { "names": ["Hershey"], "size": "mid", "risk": "lower", "familiarity": "high", "character": "established", "about": "Makes Hershey's, Reese's and other chocolate and candy brands." },
+    "EL": { "names": ["Estée Lauder", "Estee Lauder"], "size": "mid", "risk": "higher", "familiarity": "medium", "character": "established", "about": "Owns Estée Lauder, Clinique and MAC cosmetics." },
+    "ELF": { "names": ["e.l.f.", "Elf Beauty"], "size": "mid", "risk": "higher", "familiarity": "medium", "character": "growth", "about": "Sells affordable makeup and skincare." },
+    "LLY": { "names": ["Eli Lilly", "Lilly"], "size": "mega", "risk": "medium", "familiarity": "medium", "character": "growth", "about": "Makes medicines including Mounjaro and Zepbound." },
+    "NVO": { "names": ["Novo Nordisk", "Novo", "Ozempic", "Wegovy"], "size": "large", "risk": "higher", "familiarity": "medium", "character": "established", "about": "Makes diabetes and weight-loss medicines including Ozempic." },
+    "JNJ": { "names": ["Johnson & Johnson", "J&J"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Makes prescription medicines and medical devices." },
+    "UNH": { "names": ["UnitedHealth"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "The largest health insurer in the United States." },
+    "ISRG": { "names": ["Intuitive Surgical", "da Vinci"], "size": "large", "risk": "medium", "familiarity": "low", "character": "growth", "about": "Makes the da Vinci robotic surgery system." },
+    "VRTX": { "names": ["Vertex"], "size": "large", "risk": "medium", "familiarity": "low", "character": "growth", "about": "Develops medicines for cystic fibrosis and other genetic diseases." },
+    "REGN": { "names": ["Regeneron"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Develops antibody medicines for eye disease, allergies and more." },
+    "AMGN": { "names": ["Amgen"], "size": "large", "risk": "lower", "familiarity": "medium", "character": "established", "about": "One of the largest biotech companies, with medicines for many conditions." },
+    "MRNA": { "names": ["Moderna"], "size": "mid", "risk": "higher", "familiarity": "high", "character": "emerging", "about": "Develops mRNA vaccines and medicines." },
+    "DXCM": { "names": ["Dexcom"], "size": "mid", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Makes wearable glucose monitors for people with diabetes." },
+    "HIMS": { "names": ["Hims & Hers", "Hims"], "size": "mid", "risk": "higher", "familiarity": "medium", "character": "emerging", "about": "Runs an online health service with prescriptions delivered to your door." },
+    "JPM": { "names": ["JPMorgan", "JP Morgan", "Chase"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "The largest bank in the United States." },
+    "BAC": { "names": ["Bank of America", "BofA"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "One of the largest US banks for people and businesses." },
+    "BLK": { "names": ["BlackRock", "iShares"], "size": "large", "risk": "medium", "familiarity": "medium", "character": "established", "about": "Manages investments for people and institutions, including iShares funds." },
+    "V": { "names": ["Visa"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Runs the payment network behind Visa cards." },
+    "MA": { "names": ["Mastercard"], "size": "mega", "risk": "lower", "familiarity": "high", "character": "established", "about": "Runs the payment network behind Mastercard cards." },
+    "PYPL": { "names": ["PayPal", "Venmo"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Runs PayPal and Venmo for online payments." },
+    "XYZ": { "names": ["Block Inc", "Cash App", "Square"], "size": "mid", "risk": "higher", "familiarity": "high", "character": "growth", "about": "Runs Cash App and Square's payment tools for small businesses." },
+    "LMT": { "names": ["Lockheed"], "size": "large", "risk": "lower", "familiarity": "medium", "character": "established", "about": "Builds the F-35 fighter jet, missiles and spacecraft." },
+    "RTX": { "names": ["RTX", "Raytheon", "Pratt & Whitney"], "size": "large", "risk": "lower", "familiarity": "low", "character": "established", "about": "Makes Pratt & Whitney jet engines and Raytheon defense systems." },
+    "NOC": { "names": ["Northrop"], "size": "large", "risk": "lower", "familiarity": "low", "character": "established", "about": "Builds the B-21 bomber, satellites and space systems." },
+    "BA": { "names": ["Boeing"], "size": "large", "risk": "higher", "familiarity": "high", "character": "established", "about": "Builds passenger jets, defense aircraft and spacecraft." },
+    "GE": { "names": ["GE Aerospace"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Makes jet engines for commercial and military aircraft." },
+    "RKLB": { "names": ["Rocket Lab"], "size": "mid", "risk": "higher", "familiarity": "low", "character": "emerging", "about": "Launches small rockets and builds parts for satellites." },
+    "DAL": { "names": ["Delta Air", "Delta"], "size": "large", "risk": "higher", "familiarity": "high", "character": "established", "about": "One of the largest airlines in the United States." },
+    "CAT": { "names": ["Caterpillar"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Makes construction and mining machines." },
+    "DE": { "names": ["Deere", "John Deere"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Makes John Deere tractors and farm machines, including self-driving ones." },
+    "ETN": { "names": ["Eaton"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Makes electrical equipment that manages power in buildings and data centers." },
+    "PWR": { "names": ["Quanta"], "size": "large", "risk": "medium", "familiarity": "low", "character": "growth", "about": "Builds and maintains power lines and electric-grid infrastructure." },
+    "UPS": { "names": ["UPS"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Delivers packages around the world." },
+    "FDX": { "names": ["FedEx"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Delivers packages and freight around the world." },
+    "UNP": { "names": ["Union Pacific"], "size": "large", "risk": "lower", "familiarity": "medium", "character": "established", "about": "Runs one of the largest freight railroads in the United States." },
+    "ROK": { "names": ["Rockwell"], "size": "mid", "risk": "medium", "familiarity": "low", "character": "established", "about": "Makes the control systems that automate factories." },
+    "GEV": { "names": ["GE Vernova", "Vernova"], "size": "large", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Makes gas turbines, wind turbines and power-grid equipment." },
+    "XOM": { "names": ["Exxon", "ExxonMobil"], "size": "mega", "risk": "medium", "familiarity": "high", "character": "established", "about": "One of the largest oil and gas companies in the world." },
+    "CVX": { "names": ["Chevron"], "size": "large", "risk": "medium", "familiarity": "high", "character": "established", "about": "Produces and refines oil and natural gas." },
+    "COP": { "names": ["ConocoPhillips"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Finds and produces oil and natural gas." },
+    "SLB": { "names": ["SLB", "Schlumberger"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Provides technology and services to oil and gas producers." },
+    "NEE": { "names": ["NextEra"], "size": "large", "risk": "lower", "familiarity": "medium", "character": "established", "about": "Owns Florida's largest utility and builds wind and solar farms." },
+    "CEG": { "names": ["Constellation Energy", "Constellation"], "size": "large", "risk": "higher", "familiarity": "low", "character": "growth", "about": "Runs the largest fleet of nuclear power plants in the United States." },
+    "PLD": { "names": ["Prologis"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Owns warehouses used by retailers and delivery companies." },
+    "AMT": { "names": ["American Tower"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Owns cell towers that wireless carriers rent." },
+    "EQIX": { "names": ["Equinix"], "size": "large", "risk": "medium", "familiarity": "low", "character": "established", "about": "Owns data centers where companies keep their servers." },
+    "O": { "names": ["Realty Income"], "size": "large", "risk": "lower", "familiarity": "low", "character": "established", "about": "Owns thousands of buildings rented to stores and restaurants." }
+  }
+}

@@ -20,6 +20,7 @@ export const JOB_KIND = {
   reconcilePaperAccount: 'reconcile_paper_account',
   answerMessage: 'answer_message',
   homeBrief: 'home_brief',
+  dailyDiscovery: 'daily_discovery',
 } as const;
 
 const KNOWN_JOB_KINDS: readonly string[] = Object.values(JOB_KIND);
