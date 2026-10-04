@@ -91,6 +91,7 @@ export default function RootLayout() {
               options={{ presentation: 'modal', headerShown: true, title: 'Edit preferences' }}
             />
             <Stack.Screen name="stock/[ticker]" />
+            <Stack.Screen name="watchlist" />
             <Stack.Screen
               name="trade"
               options={{ presentation: 'fullScreenModal', gestureEnabled: false }}

@@ -32,6 +32,8 @@ export function T({
   children: ReactNode;
   accessibilityRole?: 'header' | 'text' | 'alert';
   numberOfLines?: number;
+  adjustsFontSizeToFit?: boolean;
+  minimumFontScale?: number;
   selectable?: boolean;
 }) {
   return (
