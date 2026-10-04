@@ -55,6 +55,13 @@ CAPABILITY_TTL = 6 * 3600
 CAPABILITY_PROBE_SYMBOL = "SPY"
 
 
+def _logo_url(value: Any) -> str:
+    """Only https links short enough for the stock table; anything else means no logo."""
+    if isinstance(value, str) and value.startswith("https://") and len(value) <= 300:
+        return value
+    return ""
+
+
 def _decimal(value: Any, field: str) -> Decimal:
     if isinstance(value, bool) or value is None:
         raise ProviderContractError(f"{field} missing")
@@ -258,6 +265,7 @@ class FinnhubProvider:
             exchange=str(body.get("exchange", "")),
             industry=str(body.get("finnhubIndustry", "")),
             currency=str(body.get("currency", "USD")),
+            logo_url=_logo_url(body.get("logo")),
         )
 
     async def get_market_status(self) -> MarketStatus:

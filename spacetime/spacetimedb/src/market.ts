@@ -92,6 +92,7 @@ const StockInput = t.object('StockInput', {
   kind: t.string(),
   benchmark: t.string(),
   displayOrder: t.u16(),
+  logoUrl: t.string(),
 });
 
 /** Replaces the active universe; tickers not listed are deactivated, never deleted. */
@@ -104,6 +105,9 @@ export const upsertStocks = spacetimedb.reducer(
       if (!TICKER_PATTERN.test(s.ticker) || listed.has(s.ticker)) throw new SenderError('invalid_ticker');
       if (s.kind !== 'equity' && s.kind !== 'benchmark') throw new SenderError('invalid_stock_kind');
       if (s.name.length === 0 || s.name.length > 120) throw new SenderError('invalid_stock_name');
+      if (s.logoUrl !== '' && (!s.logoUrl.startsWith('https://') || s.logoUrl.length > 300)) {
+        throw new SenderError('invalid_logo_url');
+      }
       listed.add(s.ticker);
     }
     for (const s of stocks) {

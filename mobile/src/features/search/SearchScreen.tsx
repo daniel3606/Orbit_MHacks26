@@ -2,7 +2,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useState, type ComponentProps } from 'react';
 import {
-  Image,
   Keyboard,
   Pressable,
   StyleSheet,
@@ -26,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, SvgXml } from 'react-native-svg';
 
 import { money } from '@/features/market/format';
+import { StockLogo } from '@/features/market/StockLogo';
 import { filterStocks } from '@/features/search/filter';
 import { useRecents } from '@/features/search/recents';
 import { realtime, type QuoteVM, type StockVM } from '@/realtime/connection';
@@ -43,8 +43,6 @@ const orbitTemplate = `<svg width="430" height="932" viewBox="0 0 430 932" prese
 </linearGradient>
 </defs>
 </svg>`;
-
-const mark = require('../../../assets/images/icon-transparent.png');
 
 const GAIN = '#34C759';
 const MUTED = '#8E8E93';
@@ -83,6 +81,7 @@ function resolveRecent(ticker: string, stocks: readonly StockVM[]): StockVM {
     kind: 'equity',
     benchmark: '',
     displayOrder: 0,
+    logoUrl: '',
   };
 }
 
@@ -133,9 +132,7 @@ function StockRow({
         accessibilityLabel={`Open ${label}`}
         onPress={onPress}
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
-        <View style={styles.markWrap}>
-          <Image source={mark} style={styles.mark} resizeMode="contain" accessibilityIgnoresInvertColors />
-        </View>
+        <StockLogo ticker={stock.ticker} logoUrl={stock.logoUrl} />
         <View style={styles.identity}>
           <Text style={styles.ticker} numberOfLines={1}>
             {stock.ticker}
@@ -372,14 +369,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   rowPressed: { opacity: 0.62 },
-  markWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mark: { width: 40, height: 40 },
   identity: { flex: 1, gap: 2 },
   ticker: {
     fontFamily: font.bold,

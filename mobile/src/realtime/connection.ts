@@ -79,6 +79,8 @@ export type StockVM = {
   kind: 'equity' | 'benchmark';
   benchmark: string;
   displayOrder: number;
+  /** Provider logo (https), or '' when there is none, e.g. ETFs. */
+  logoUrl: string;
 };
 export type QuoteVM = {
   ticker: string;
@@ -759,6 +761,7 @@ class ConnectionManager {
           kind: s.kind === 'benchmark' ? ('benchmark' as const) : ('equity' as const),
           benchmark: s.benchmark,
           displayOrder: s.displayOrder,
+          logoUrl: s.logoUrl,
         }))
         .sort((a, b) => a.displayOrder - b.displayOrder),
       quotes,

@@ -71,6 +71,7 @@ class CompanyProfile:
     exchange: str
     industry: str
     currency: str
+    logo_url: str = ""  # https image, or "" when the provider has none
 
 
 class MarketDataProvider(Protocol):

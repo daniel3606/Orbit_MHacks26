@@ -174,7 +174,7 @@ before(async () => {
     'SELECT * FROM market_generation',
     'SELECT * FROM provider_capability',
   ]);
-  const base = { exchange: 'TEST', industry: 'Test', currency: 'USD' };
+  const base = { exchange: 'TEST', industry: 'Test', currency: 'USD', logoUrl: '' };
   await svc.conn.reducers.upsertStocks({
     stocks: [
       { ...base, ticker: 'SPY', name: 'Benchmark (fixture)', sector: '', kind: 'benchmark', benchmark: '', displayOrder: 1 },
@@ -206,6 +206,21 @@ describe('market publication authorization', () => {
     await rejectsWith(r.registerWorker({ kinds: ['ingest_market'] }), 'not_authorized_service');
     await rejectsWith(r.configureMarketSchedule({ intervalSeconds: 60 }), 'not_authorized_admin');
     await rejectsWith(r.setServiceFlag({ key: 'allow_fixture_data', value: true }), 'not_authorized_admin');
+  });
+
+  test('stock logos must be https or empty', async () => {
+    const equity = {
+      ticker: 'AAA', name: 'Equity (fixture)', exchange: 'TEST', industry: 'Test', sector: 'technology',
+      currency: 'USD', kind: 'equity', benchmark: 'SPY', displayOrder: 0,
+    };
+    const spy = { ...equity, ticker: 'SPY', name: 'Benchmark (fixture)', sector: '', kind: 'benchmark', benchmark: '', displayOrder: 1, logoUrl: '' };
+    await rejectsWith(
+      svc.conn.reducers.upsertStocks({ stocks: [spy, { ...equity, logoUrl: 'http://example.com/a.png' }] }),
+      'invalid_logo_url'
+    );
+    await svc.conn.reducers.upsertStocks({ stocks: [spy, { ...equity, logoUrl: 'https://example.com/a.png' }] });
+    await waitFor('logo', () => (user.conn.db.stock.ticker.find('AAA')?.logoUrl === 'https://example.com/a.png' ? true : undefined));
+    assert.equal(user.conn.db.stock.ticker.find('SPY')?.logoUrl, '');
   });
 
   test('consumers see shared projections but no private market tables', async () => {

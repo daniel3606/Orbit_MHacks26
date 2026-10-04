@@ -364,6 +364,7 @@ class IngestMarketHandler:
                     "kind": "equity",
                     "benchmark": eq.benchmark,
                     "display_order": order,
+                    "logo_url": p.logo_url if p else "",
                 }
             )
             order += 1
@@ -372,6 +373,7 @@ class IngestMarketHandler:
                 {
                     "ticker": b.ticker, "name": b.name, "exchange": "", "industry": "ETF", "sector": b.sector,
                     "currency": "USD", "kind": "benchmark", "benchmark": "", "display_order": order,
+                    "logo_url": "",
                 }
             )
             order += 1

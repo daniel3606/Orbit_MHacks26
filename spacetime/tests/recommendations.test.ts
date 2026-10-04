@@ -143,9 +143,9 @@ before(async () => {
   await subscribe(other.conn, ['SELECT * FROM my_recommendations', 'SELECT * FROM my_recommendation_generation']);
   await svc.conn.reducers.upsertStocks({
     stocks: [
-      { ticker: 'SPY', name: 'Benchmark', exchange: 'TEST', industry: 'ETF', sector: '', currency: 'USD', kind: 'benchmark', benchmark: '', displayOrder: 0 },
-      { ticker: 'REC', name: 'Rec Co', exchange: 'TEST', industry: 'Software', sector: 'technology', currency: 'USD', kind: 'equity', benchmark: 'SPY', displayOrder: 1 },
-      { ticker: 'ALT', name: 'Alt Co', exchange: 'TEST', industry: 'Software', sector: 'technology', currency: 'USD', kind: 'equity', benchmark: 'SPY', displayOrder: 2 },
+      { ticker: 'SPY', name: 'Benchmark', exchange: 'TEST', industry: 'ETF', sector: '', currency: 'USD', kind: 'benchmark', benchmark: '', displayOrder: 0, logoUrl: '' },
+      { ticker: 'REC', name: 'Rec Co', exchange: 'TEST', industry: 'Software', sector: 'technology', currency: 'USD', kind: 'equity', benchmark: 'SPY', displayOrder: 1, logoUrl: '' },
+      { ticker: 'ALT', name: 'Alt Co', exchange: 'TEST', industry: 'Software', sector: 'technology', currency: 'USD', kind: 'equity', benchmark: 'SPY', displayOrder: 2, logoUrl: '' },
     ],
   });
   await svc.conn.reducers.requestMarketIngest({});

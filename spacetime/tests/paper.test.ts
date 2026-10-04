@@ -84,6 +84,7 @@ before(async () => {
         kind: 'benchmark',
         benchmark: '',
         displayOrder: 1,
+        logoUrl: '',
       },
       {
         ticker: 'CAT',
@@ -95,6 +96,7 @@ before(async () => {
         kind: 'equity',
         benchmark: 'SPY',
         displayOrder: 0,
+        logoUrl: '',
       },
     ],
   });

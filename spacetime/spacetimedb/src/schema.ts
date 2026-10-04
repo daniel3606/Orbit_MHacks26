@@ -148,6 +148,7 @@ export const stock = table(
     displayOrder: t.u16(),
     active: t.bool().index('btree'),
     updatedAt: t.timestamp(),
+    logoUrl: t.string().default(''), // provider's https logo image; '' when it has none (ETFs)
   }
 );
 

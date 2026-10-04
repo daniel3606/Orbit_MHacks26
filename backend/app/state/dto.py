@@ -69,6 +69,7 @@ class StockV1(_Dto):
     display_order: int
     active: bool
     updated_at: datetime
+    logo_url: str = ""
 
 
 class MarketQuoteV1(_Dto):
