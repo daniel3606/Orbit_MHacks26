@@ -126,6 +126,11 @@ export function explainReason(reason: string | null): string {
   }
 }
 
+/** `1234567` → `1,234,567`. Hermes' BigInt#toLocaleString ignores grouping, so it is done on the digits. */
+function groupDigits(digits: string): string {
+  return digits.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 /** Integer micro-units (1e-6). Display only; orders keep the integer. */
 export function formatMicros(micros: string, digits = 2): string {
   if (!/^-?\d+$/.test(micros)) return '—';
@@ -134,7 +139,7 @@ export function formatMicros(micros: string, digits = 2): string {
   const padded = digitsOnly.padStart(7, '0');
   const whole = padded.slice(0, -6);
   const frac = padded.slice(-6, -6 + digits);
-  return `${negative ? '−' : ''}$${BigInt(whole).toLocaleString('en-US')}.${frac}`;
+  return `${negative ? '−' : ''}$${groupDigits(whole)}.${frac}`;
 }
 
 export function formatShares(micros: string): string {
@@ -142,7 +147,7 @@ export function formatShares(micros: string): string {
   const padded = micros.padStart(7, '0');
   const whole = padded.slice(0, -6);
   const frac = padded.slice(-6).replace(/0+$/, '');
-  return frac ? `${BigInt(whole).toLocaleString('en-US')}.${frac}` : BigInt(whole).toLocaleString('en-US');
+  return frac ? `${groupDigits(whole)}.${frac}` : groupDigits(whole);
 }
 
 export function parseDecimalMicros(text: string): bigint | null {
