@@ -304,6 +304,7 @@ class FinnhubProvider:
             headline = str(row.get("headline") or "").strip()
             url = str(row.get("url") or "").strip()
             source = str(row.get("source") or "").strip()
+            summary = str(row.get("summary") or "").strip()
             when = row.get("datetime")
             if not headline or not url or not isinstance(when, int):
                 continue
@@ -315,6 +316,8 @@ class FinnhubProvider:
                     "source": source[:80] or "finnhub",
                     "published": datetime.fromtimestamp(when, UTC).isoformat(),
                     "ticker": ticker,
+                    # Untrusted provider text: input to the classifier only, never shown or sent to OpenAI.
+                    "summary": summary[:2000],
                 }
             )
             if len(items) >= limit:

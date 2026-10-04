@@ -11,6 +11,7 @@ import spacetimedb, {
   assistantMessage,
   dailyDiscovery,
   dailyDiscoveryItem,
+  newsClassification,
   notification,
   profileBranding,
   recommendation,
@@ -418,5 +419,19 @@ export const workerDiscoveryItems = spacetimedb.view(
       }
     }
     return out;
+  }
+);
+
+/**
+ * Stored Jev classifications (service only). They describe public news articles,
+ * not people, so every allowlisted worker can reuse them. Bounded by the
+ * reducer's retention.
+ */
+export const workerNewsClassifications = spacetimedb.view(
+  { name: 'worker_news_classifications', public: true },
+  t.array(newsClassification.rowType),
+  ctx => {
+    if (!isService(ctx, ctx.sender)) return [];
+    return [...ctx.db.newsClassification.iter()];
   }
 );

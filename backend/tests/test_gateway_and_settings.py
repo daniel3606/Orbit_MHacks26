@@ -116,3 +116,59 @@ def test_blank_env_values_are_treated_as_unset(tmp_path, monkeypatch):
     s = Settings(_env_file=env, spacetime_service_token_file=token_file)
     assert s.spacetime_service_token is None and s.finnhub_api_key is None
     assert s.resolved_service_token().get_secret_value() == "from-file"
+
+
+# ---- Jev readiness: a key is "configured"; only a recorded provider response is "verified" ----
+
+from datetime import UTC, datetime  # noqa: E402
+
+from app.routes.health import _jev_status  # noqa: E402
+from app.state.dto import ProviderCapabilityV1  # noqa: E402
+
+
+class _Capabilities:
+    def __init__(self, rows=None, fail=False):
+        self.rows = rows or []
+        self.fail = fail
+
+    async def provider_capabilities(self):
+        if self.fail:
+            raise GatewayUnavailable("down")
+        return self.rows
+
+
+def _jev_row(available: bool, detail: str) -> ProviderCapabilityV1:
+    return ProviderCapabilityV1(
+        key="jev.news_classification", provider="jev", capability="News classification (Jev)",
+        available=available, detail=detail, checked_at=datetime(2026, 10, 4, 12, tzinfo=UTC),
+    )
+
+
+async def test_jev_readiness_separates_configured_from_verified():
+    unset = Settings(_env_file=None, spacetime_service_token_file=None)
+    keyed = Settings(jev_api_key="sk-or-hidden", _env_file=None, spacetime_service_token_file=None)
+    assert (await _jev_status(unset, _Capabilities(), True))[0] == "not_configured"
+    assert (await _jev_status(keyed, _Capabilities(), True))[0] == "configured"
+    assert (await _jev_status(keyed, _Capabilities(fail=True), True))[0] == "configured"
+    assert (await _jev_status(keyed, _Capabilities(), False))[0] == "configured"
+    pending = _jev_row(False, "Key configured; not verified yet")
+    assert (await _jev_status(keyed, _Capabilities([pending]), True))[0] == "configured"
+    status, detail = await _jev_status(keyed, _Capabilities([_jev_row(True, "Verified with typesafe/jev-1.13-20260917")]), True)
+    assert status == "verified" and "2026-10-04T12:00:00" in detail
+    failed = _jev_row(False, "Not verified: auth_failed (HTTP 401); off until the key is fixed")
+    status, detail = await _jev_status(keyed, _Capabilities([failed]), True)
+    assert status == "fail" and "auth_failed" in detail and "sk-or-hidden" not in detail
+
+
+def test_ready_reports_a_configured_but_unverified_jev_key():
+    settings = Settings(
+        _env_file=None,
+        spacetime_http_url="http://127.0.0.1:9",  # nothing listens here
+        spacetime_service_token_file=None,
+        jev_api_key="sk-or-hidden",
+    )
+    with TestClient(create_app(settings)) as client:
+        body = client.get("/ready").json()
+    assert body["checks"]["jev"] == "configured"
+    assert "unreadable" in body["details"]["jev"]
+    assert "sk-or-hidden" not in str(body)

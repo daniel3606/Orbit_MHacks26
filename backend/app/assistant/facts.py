@@ -125,7 +125,12 @@ def range_extremes(bars: list[BarPoint]) -> tuple[Decimal, Decimal, int] | None:
 
 
 def catalyst_level(news: list[NewsFact], as_of: str | None) -> int:
-    """1 earnings-aligned, 2 recent coverage, 3 older related news, 4 none."""
+    """1 earnings-aligned, 2 recent coverage, 3 older related news, 4 none.
+
+    A story Jev classified is earnings news only when Jev kept it for this company
+    with event type `earnings`; one Jev did not keep is not coverage of it at all.
+    An unclassified story falls back to the headline pattern used before Jev."""
+    news = [item for item in news if item.classification is None or item.classification.keep]
     if not news:
         return 4
     as_of_day = session_date_of(as_of) if as_of else None
@@ -133,7 +138,10 @@ def catalyst_level(news: list[NewsFact], as_of: str | None) -> int:
     for item in news:
         published = session_date_of(item.published)
         gap = _day_gap(as_of_day, published)
-        earnings = _EARNINGS.search(item.headline) is not None
+        if item.classification is not None:
+            earnings = item.classification.event_type == "earnings"
+        else:
+            earnings = _EARNINGS.search(item.headline) is not None
         if earnings and gap is not None and gap <= 3:
             return 1
         if gap is not None and gap <= 2:

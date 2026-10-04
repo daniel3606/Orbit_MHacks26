@@ -76,6 +76,9 @@ NEWS_SATURATION = 2.0
 NEWS_MAX_ITEMS = 30  # stories read per company; only those naming the company are kept
 NEWS_COUNT_CAP = 10  # shown as "10+" above this
 NEWS_TIMEOUT_SECONDS = 8.0
+# Jev picks the headline a card shows; it never changes a score. Only each pick's newest stories are sent.
+CLASSIFY_STORIES_PER_PICK = 5
+CLASSIFY_TIMEOUT_SECONDS = 8.0
 
 # Final set.
 TOP_N = 3

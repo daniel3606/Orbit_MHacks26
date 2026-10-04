@@ -9,6 +9,8 @@ from app.assistant.handle import handlers as assistant_handlers
 from app.config.settings import get_settings
 from app.config.universe import load_universe
 from app.discovery.handler import DailyDiscoveryHandler
+from app.intelligence.jev import JevClassifier
+from app.intelligence.service import NewsClassificationService
 from app.market.alpaca import AlpacaHistoricalProvider
 from app.market.finnhub import FinnhubProvider
 from app.market.ingest import IngestMarketHandler
@@ -118,8 +120,30 @@ async def main() -> int:
         else:
             log.warning("Paper trading not registered (PAPER_DEMO_IDENTITY or Alpaca keys missing)")
 
+        # Jev classifies the news that Discovery and the assistant read. One service, one cache.
+        classifier: JevClassifier | None = None
+        if settings.jev_api_key is not None:
+            names = {eq.ticker: eq.name for eq in load_universe().equities if eq.name}
+            names.update({row.ticker: row.name for row in await gateway.stocks() if row.name})
+            classifier = JevClassifier(
+                settings.jev_api_key,
+                base_url=str(settings.jev_base_url).rstrip("/"),
+                model=settings.jev_model,
+                company_names=names,
+                timeout=settings.jev_timeout_seconds,
+                calls_per_minute=settings.jev_calls_per_minute,
+                burst=settings.jev_burst,
+                max_retries=settings.jev_max_retries,
+            )
+            capability = await classifier.verify()
+            log.info("jev %s: %s", "verified" if capability.available else "NOT verified", capability.detail)
+        else:
+            log.warning("JEV_API_KEY is unset; news stays unclassified and classification-dependent fields are left out")
+        classification = NewsClassificationService(classifier)
+        await classification.publish_capability(gateway)  # health reads this row; replaces any stale one
+
         # Discovery always runs; without a news provider the news component is left out.
-        handlers[DailyDiscoveryHandler.kind] = DailyDiscoveryHandler(news_provider)
+        handlers[DailyDiscoveryHandler.kind] = DailyDiscoveryHandler(news_provider, classification=classification)
 
         handlers.update(
             assistant_handlers(
@@ -128,6 +152,7 @@ async def main() -> int:
                 timeout=settings.openai_timeout_seconds,
                 max_output_tokens=settings.openai_max_output_tokens,
                 news=news_provider,
+                classification=classification,
             )
         )
         if settings.openai_api_key is None:
@@ -160,6 +185,9 @@ async def main() -> int:
                 await news_provider.aclose()
             if paper is not None:
                 await paper.aclose()
+            if classifier is not None:
+                log.info("jev calls=%d cost_usd=%.6f", classifier.http_calls, classifier.cost_usd)
+                await classifier.aclose()
         log.info("worker stopped")
     return 0
 

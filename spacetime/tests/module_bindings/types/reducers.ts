@@ -25,6 +25,7 @@ import PublishMarketSnapshotReducer from "../publish_market_snapshot_reducer";
 import PublishProviderCapabilitiesReducer from "../publish_provider_capabilities_reducer";
 import PublishRecommendationsReducer from "../publish_recommendations_reducer";
 import RebindPaperDemoReducer from "../rebind_paper_demo_reducer";
+import RecordNewsClassificationsReducer from "../record_news_classifications_reducer";
 import RegisterWorkerReducer from "../register_worker_reducer";
 import RequestBackendCheckReducer from "../request_backend_check_reducer";
 import RequestDailyDiscoveryReducer from "../request_daily_discovery_reducer";
@@ -57,6 +58,7 @@ export type PublishMarketSnapshotParams = __Infer<typeof PublishMarketSnapshotRe
 export type PublishProviderCapabilitiesParams = __Infer<typeof PublishProviderCapabilitiesReducer>;
 export type PublishRecommendationsParams = __Infer<typeof PublishRecommendationsReducer>;
 export type RebindPaperDemoParams = __Infer<typeof RebindPaperDemoReducer>;
+export type RecordNewsClassificationsParams = __Infer<typeof RecordNewsClassificationsReducer>;
 export type RegisterWorkerParams = __Infer<typeof RegisterWorkerReducer>;
 export type RequestBackendCheckParams = __Infer<typeof RequestBackendCheckReducer>;
 export type RequestDailyDiscoveryParams = __Infer<typeof RequestDailyDiscoveryReducer>;

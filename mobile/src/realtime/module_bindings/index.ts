@@ -53,6 +53,7 @@ import PublishMarketSnapshotReducer from "./publish_market_snapshot_reducer";
 import PublishProviderCapabilitiesReducer from "./publish_provider_capabilities_reducer";
 import PublishRecommendationsReducer from "./publish_recommendations_reducer";
 import RebindPaperDemoReducer from "./rebind_paper_demo_reducer";
+import RecordNewsClassificationsReducer from "./record_news_classifications_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RequestBackendCheckReducer from "./request_backend_check_reducer";
 import RequestDailyDiscoveryReducer from "./request_daily_discovery_reducer";
@@ -98,6 +99,7 @@ import WorkerDiscoveryHistoryRow from "./worker_discovery_history_table";
 import WorkerDiscoveryItemsRow from "./worker_discovery_items_table";
 import WorkerJobProfilesRow from "./worker_job_profiles_table";
 import WorkerJobsRow from "./worker_jobs_table";
+import WorkerNewsClassificationsRow from "./worker_news_classifications_table";
 import WorkerPaperAccountRow from "./worker_paper_account_table";
 import WorkerPaperOrdersRow from "./worker_paper_orders_table";
 
@@ -331,6 +333,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, WorkerJobsRow),
+  workerNewsClassifications: __table({
+    name: 'worker_news_classifications',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerNewsClassificationsRow),
   workerPaperAccount: __table({
     name: 'worker_paper_account',
     indexes: [
@@ -368,6 +377,7 @@ const reducersSchema = __reducers(
   __reducerSchema("publish_provider_capabilities", PublishProviderCapabilitiesReducer),
   __reducerSchema("publish_recommendations", PublishRecommendationsReducer),
   __reducerSchema("rebind_paper_demo", RebindPaperDemoReducer),
+  __reducerSchema("record_news_classifications", RecordNewsClassificationsReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("request_backend_check", RequestBackendCheckReducer),
   __reducerSchema("request_daily_discovery", RequestDailyDiscoveryReducer),

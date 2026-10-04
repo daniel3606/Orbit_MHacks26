@@ -416,6 +416,34 @@ export const dailyDiscoveryItem = table(
     newsSource: t.option(t.string()),
     newsUrl: t.option(t.string()),
     newsPublishedAt: t.option(t.timestamp()),
+    // Jev coverage behind the headline choice: 'classified', 'partial:<reason>', 'unavailable:<reason>',
+    // 'not_configured', 'no_articles'. '' on sets published before classification existed.
+    newsClassification: t.string().default(''),
+  }
+);
+
+/**
+ * Jev's judgment of one article for one ticker under one classifier version
+ * (PRD `jev_classifications`). Private provenance and a cache shared by every
+ * worker job; written only under the lease of the job that classified it.
+ */
+export const newsClassification = table(
+  { name: 'news_classification' },
+  {
+    cacheKey: t.string().primaryKey(), // sha256(content hash | ticker | classifier version)
+    ticker: t.string(),
+    articleId: t.string(),
+    contentHash: t.string(),
+    classifierVersion: t.string(),
+    relevant: t.bool(),
+    relevanceScore: t.f64(),
+    eventType: t.string(),
+    sentiment: t.string(),
+    materiality: t.string(),
+    keep: t.bool(),
+    publishedAt: t.timestamp(),
+    classifiedAt: t.timestamp(),
+    jobId: t.u64(),
   }
 );
 
@@ -577,6 +605,7 @@ const spacetimedb = schema({
   recommendation,
   dailyDiscovery,
   dailyDiscoveryItem,
+  newsClassification,
   paperBinding,
   paperAccount,
   paperPosition,

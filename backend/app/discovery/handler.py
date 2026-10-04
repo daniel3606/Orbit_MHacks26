@@ -5,9 +5,16 @@ own profile and recent discoveries, and asks the provider for company news.
 Each step degrades on its own: a failed news call drops the news component, a
 missing quote skips that company, and a theme without enough priced companies
 hands over to the next theme in today's order.
+
+Jev never changes a score here. After ranking, it judges each pick's newest
+headlines, and the card shows the newest one Jev kept as being about that
+company. Without classification the headline stays the newest one that names
+the company (the rule before Jev), and the item records why in
+`news_classification`.
 """
 
 import asyncio
+import dataclasses
 import json
 import logging
 from collections.abc import Callable
@@ -16,6 +23,8 @@ from typing import Any, Protocol
 
 from app.discovery.config import (
     ALGORITHM_VERSION,
+    CLASSIFY_STORIES_PER_PICK,
+    CLASSIFY_TIMEOUT_SECONDS,
     MIN_ITEMS,
     NEWS_MAX_ITEMS,
     NEWS_TIMEOUT_SECONDS,
@@ -31,9 +40,11 @@ from app.discovery.scoring import (
     ProfileTraits,
     ThemeRanking,
     rank_theme,
+    recent_stories,
     relevant,
 )
 from app.discovery.themes import ZODIAC_SIGNS, ThemeConfig, load_themes
+from app.intelligence.service import Article, ClassifiedNews, NewsClassificationService
 from app.state.dto import (
     DailyDiscoveryItemV1,
     InvestmentProfileV1,
@@ -118,10 +129,50 @@ def _story(item: dict[str, str]) -> NewsStory | None:
         published = datetime.fromisoformat(item["published"])
     except (KeyError, ValueError):
         return None
-    return NewsStory(headline=item["headline"], source=item["source"], url=item["url"], published=published)
+    return NewsStory(
+        headline=item["headline"],
+        source=item["source"],
+        url=item["url"],
+        published=published,
+        article_id=item.get("id", ""),
+        summary=item.get("summary") or None,
+    )
 
 
-def item_arg(pick: DiscoveryPick) -> dict[str, Any]:
+def _article(ticker: str, story: NewsStory) -> Article:
+    return Article(
+        article_id=story.article_id or f"news:{ticker}:{int(story.published.timestamp())}",
+        ticker=ticker,
+        headline=story.headline,
+        text=story.summary,
+        source=story.source,
+        published_at=story.published,
+    )
+
+
+def choose_headline(stories: list[NewsStory], judged: ClassifiedNews, ticker: str) -> tuple[NewsStory | None, str]:
+    """The newest story Jev kept for this company, and the coverage label.
+
+    Stories Jev judged off-topic or not specific are skipped. Without any
+    classification the newest story stays (the rule before Jev). With partial
+    coverage, an unclassified story is used only when no classified one was kept."""
+    if not stories:
+        return None, "no_articles"
+    if judged.status in ("unavailable", "not_configured"):
+        return stories[0], judged.label()
+    by_id = {item.article.article_id: item for item in judged.items}
+    fallback: NewsStory | None = None
+    for story in stories:
+        item = by_id.get(_article(ticker, story).article_id)
+        if item is None or item.classification is None:
+            fallback = fallback or story
+            continue
+        if item.classification.keep:
+            return story, judged.label()
+    return fallback, judged.label()
+
+
+def item_arg(pick: DiscoveryPick, news_classification: str = "not_configured") -> dict[str, Any]:
     headline = pick.headline if pick.headline is not None and pick.headline.url.startswith("https://") else None
     return {
         "ticker": pick.ticker,
@@ -140,6 +191,7 @@ def item_arg(pick: DiscoveryPick) -> dict[str, Any]:
         "news_source": option(headline.source if headline else None),
         "news_url": option(headline.url if headline else None),
         "news_published_at": option(timestamp_arg(headline.published) if headline else None),
+        "news_classification": news_classification,
     }
 
 
@@ -152,10 +204,12 @@ class DailyDiscoveryHandler:
         news: NewsSource | None,
         themes: ThemeConfig | None = None,
         *,
+        classification: NewsClassificationService | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
         self._news = news
         self._themes = themes or load_themes()
+        self._classification = classification or NewsClassificationService(None)
         self._clock = clock
 
     async def _news_for(self, ticker: str, day: date) -> NewsFacts:
@@ -199,20 +253,22 @@ class DailyDiscoveryHandler:
             PastTheme(date.fromisoformat(row.discovery_date), row.sector_id, row.subtheme_id) for row in history
         ]
 
-        best: tuple[ThemePick, ThemeRanking] | None = None
+        best: tuple[ThemePick, ThemeRanking, dict[str, NewsFacts]] | None = None
         for pick in ordered_themes(self._themes, zodiac, day, past):
-            ranking = await self._rank(pick, day, profile, stocks, quotes, signals, market, seen, has_history=bool(items))
-            if ranking is None:
+            ranked = await self._rank(pick, day, profile, stocks, quotes, signals, market, seen, has_history=bool(items))
+            if ranked is None:
                 continue
+            ranking, news_by_ticker = ranked
             if len(ranking.picks) >= MIN_ITEMS:
-                best = (pick, ranking)
+                best = (pick, ranking, news_by_ticker)
                 break
             if best is None or len(ranking.picks) > len(best[1].picks):
-                best = (pick, ranking)
+                best = (pick, ranking, news_by_ticker)
         if best is None or not best[1].picks:
             raise JobFailure("no_discovery_candidates", retryable=True)
 
-        pick, ranking = best
+        pick, ranking, news_by_ticker = best
+        picks, coverage = await self._headlines(ranking.picks, news_by_ticker, job, gateway)
         sector = self._themes.sectors[pick.sector_id]
         sub = self._themes.subthemes[pick.subtheme_id]
         args = [
@@ -230,7 +286,7 @@ class DailyDiscoveryHandler:
             market.generation if market else 0,
             ranking.considered,
             ranking.eligible,
-            [item_arg(p) for p in ranking.picks],
+            [item_arg(p, coverage[p.ticker]) for p in picks],
         ]
         try:
             await gateway.publish_daily_discovery(args)
@@ -239,14 +295,41 @@ class DailyDiscoveryHandler:
                 raise JobFailure(exc.code, retryable=False) from exc
             raise
         log.info(
-            "discovery %s for %s…: %s (%s) → %s",
+            "discovery %s for %s…: %s (%s) → %s classification=%s",
             day,
             job.owner[:10],
             pick.subtheme_id,
             zodiac or "no sign",
             ", ".join(p.ticker for p in ranking.picks),
+            ",".join(f"{p.ticker}:{coverage[p.ticker]}" for p in picks),
         )
         return Committed(f"discovery={day.isoformat()};theme={pick.subtheme_id};count={len(ranking.picks)}")
+
+    async def _headlines(
+        self,
+        picks: tuple[DiscoveryPick, ...],
+        news_by_ticker: dict[str, NewsFacts],
+        job: JobV1,
+        gateway: SpacetimeGateway,
+    ) -> tuple[list[DiscoveryPick], dict[str, str]]:
+        """Classifies each pick's newest stories in one batch and picks the headline to show."""
+        now = self._clock()
+        recent = {
+            p.ticker: recent_stories(news_by_ticker[p.ticker], now)[:CLASSIFY_STORIES_PER_PICK]
+            if news_by_ticker[p.ticker].available
+            else []
+            for p in picks
+        }
+        articles = [_article(ticker, story) for ticker, stories in recent.items() for story in stories]
+        judged = await self._classification.classify(
+            articles, gateway=gateway, job=job, deadline=CLASSIFY_TIMEOUT_SECONDS
+        )
+        chosen: list[DiscoveryPick] = []
+        coverage: dict[str, str] = {}
+        for p in picks:
+            headline, coverage[p.ticker] = choose_headline(recent[p.ticker], judged.for_ticker(p.ticker), p.ticker)
+            chosen.append(dataclasses.replace(p, headline=headline))
+        return chosen, coverage
 
     async def _rank(
         self,
@@ -260,7 +343,7 @@ class DailyDiscoveryHandler:
         seen: dict[str, date],
         *,
         has_history: bool,
-    ) -> ThemeRanking | None:
+    ) -> tuple[ThemeRanking, dict[str, NewsFacts]] | None:
         sub = self._themes.subthemes[pick.subtheme_id]
         listed = [c for c in sub.companies if c.ticker in stocks]
         facts = {c.ticker: market_facts(stocks[c.ticker], quotes.get(c.ticker), signals.get(c.ticker), market) for c in listed}
@@ -288,4 +371,4 @@ class DailyDiscoveryHandler:
             considered=len(sub.companies),
             eligible=ranking.eligible,
             exclusions={**ranking.exclusions, **({"_unpriced": str(skipped)} if skipped else {})},
-        )
+        ), {c.ticker: c.news for c in candidates}

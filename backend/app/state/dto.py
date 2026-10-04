@@ -233,3 +233,27 @@ class DailyDiscoveryItemV1(_Dto):
     news_source: str | None
     news_url: str | None
     news_published_at: datetime | None
+    # Jev coverage for the headline choice: "" (before Jev), classified, partial:<reason>, unavailable:<reason>, …
+    news_classification: str = ""
+
+
+class NewsClassificationV1(_Dto):
+    """One Jev judgment of one article for one ticker (`news_classification`, service view only)."""
+
+    cache_key: str
+    ticker: str
+    article_id: str
+    content_hash: str
+    classifier_version: str
+    relevant: bool
+    relevance_score: float = Field(ge=0, le=1)
+    event_type: Literal[
+        "earnings", "product", "partnership", "regulation", "M&A", "analyst_rating",
+        "executive", "legal", "macro", "financing", "other",
+    ]
+    sentiment: Literal["positive", "neutral", "negative"]
+    materiality: Literal["low", "medium", "high", "critical"]
+    keep: bool
+    published_at: datetime
+    classified_at: datetime
+    job_id: int

@@ -20,6 +20,7 @@ export { requestDailyDiscovery, publishDailyDiscovery } from './discovery';
 export { enqueueAssistantMessage, requestHomeBrief, clearAssistantChat, publishAssistantReply } from './assistant';
 export { bindPaperDemo, rebindPaperDemo, createPaperOrderIntent, requestPaperSync, requestPaperReconcile, applyPaperSnapshot } from './paper';
 export { markNotificationRead, markAllNotificationsRead } from './notifications';
+export { recordNewsClassifications } from './news';
 export {
   marketTick,
   configureMarketSchedule,
@@ -55,6 +56,7 @@ export {
   myDiscoveryItems,
   workerDiscoveryHistory,
   workerDiscoveryItems,
+  workerNewsClassifications,
 } from './views';
 
 const DEFAULT_MARKET_INTERVAL_SECONDS = 300;
