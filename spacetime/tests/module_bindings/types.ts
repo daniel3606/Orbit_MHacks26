@@ -10,6 +10,20 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AssistantMessage = __t.object("AssistantMessage", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  sequence: __t.u32(),
+  role: __t.string(),
+  kind: __t.string(),
+  body: __t.string(),
+  citations: __t.string(),
+  status: __t.string(),
+  clientKey: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AssistantMessage = __Infer<typeof AssistantMessage>;
+
 export const BarInput = __t.object("BarInput", {
   ticker: __t.string(),
   sessionDate: __t.string(),
@@ -149,6 +163,9 @@ export type ModuleAdmin = __Infer<typeof ModuleAdmin>;
 
 export const MyAccount = __t.object("MyAccount", {});
 export type MyAccount = __Infer<typeof MyAccount>;
+
+export const MyAssistantMessages = __t.object("MyAssistantMessages", {});
+export type MyAssistantMessages = __Infer<typeof MyAssistantMessages>;
 
 export const MyBranding = __t.object("MyBranding", {});
 export type MyBranding = __Infer<typeof MyBranding>;
@@ -486,6 +503,15 @@ export const UserAccount = __t.object("UserAccount", {
   lastSeenAt: __t.timestamp(),
 });
 export type UserAccount = __Infer<typeof UserAccount>;
+
+export const WorkerAssistantMessages = __t.object("WorkerAssistantMessages", {});
+export type WorkerAssistantMessages = __Infer<typeof WorkerAssistantMessages>;
+
+export const WorkerAssistantPositions = __t.object("WorkerAssistantPositions", {});
+export type WorkerAssistantPositions = __Infer<typeof WorkerAssistantPositions>;
+
+export const WorkerAssistantRecommendations = __t.object("WorkerAssistantRecommendations", {});
+export type WorkerAssistantRecommendations = __Infer<typeof WorkerAssistantRecommendations>;
 
 export const WorkerDailyBars = __t.object("WorkerDailyBars", {});
 export type WorkerDailyBars = __Infer<typeof WorkerDailyBars>;

@@ -22,9 +22,11 @@ import {
 import Svg, { Path, SvgXml } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { askOrbit, requestHomeBrief } from '@/features/profile/actions';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
 import { chartSeries } from '@/features/market/series';
 import { realtime, type StockVM } from '@/realtime/connection';
+import { messageFor, toAppError } from '@/realtime/errors';
 import { useRealtime } from '@/realtime/hooks';
 import { StockGraph } from '@/ui/StockGraph';
 import { T } from '@/ui/components';
@@ -52,11 +54,42 @@ function salutation(now = new Date()): string {
   return 'Good Evening';
 }
 
-const INTRO =
-  'Are you ready to start your early financial life? I see how you haven’t invested on any stock yet. Let me recommend you some best stocks for today.';
+const INTRO = 'I’m looking at today’s prices so I can explain them in plain language.';
 
-const TYPE_PACE_MS = 34;
-const ASK_CLEARANCE = 88;
+const SUGGESTIONS = ['What is a stock?', 'What does my Trend Score mean?', 'How does practice trading work?'];
+const MAX_QUESTION = 500;
+
+const TYPE_PACE_MS = 16;
+const ASK_CLEARANCE = 132;
+
+function tickersFor(body: string, citations: string, stocks: StockVM[]): string[] {
+  const known = new Set(stocks.map(stock => stock.ticker));
+  const found: string[] = [];
+  const add = (ticker: string) => {
+    if (known.has(ticker) && !found.includes(ticker)) found.push(ticker);
+  };
+  try {
+    const parsed = JSON.parse(citations) as { id?: string }[];
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        const match = /^(?:quote|news|score):([A-Za-z.]+)/.exec(item?.id ?? '');
+        if (match?.[1]) add(match[1]);
+      }
+    }
+  } catch {
+    // Citations are stored for the server. A bad row just means no chart.
+  }
+  if (found.length > 0) return found.slice(0, 2);
+  for (const stock of stocks) {
+    const named = stock.name.length > 2 && body.includes(stock.name);
+    if (named || new RegExp(`\\b${stock.ticker}\\b`).test(body)) add(stock.ticker);
+  }
+  return found.slice(0, 2);
+}
+
+function clientKey(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 /** How far the composer should rise so it sits just above the keyboard, not the tab bar. */
 function useKeyboardLift(tabBarHeight: number) {
@@ -97,6 +130,11 @@ function useKeyboardLift(tabBarHeight: number) {
   return { lift, inset };
 }
 
+function paragraphs(text: string): string[] {
+  const parts = text.split(/\n+/).map(part => part.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : [text];
+}
+
 /** Reveals `text` one character at a time, with a light tick on each key. */
 function TypedText({
   text,
@@ -111,8 +149,13 @@ function TypedText({
   style?: StyleProp<TextStyle>;
   accessibilityRole?: 'header' | 'text';
 }) {
+  const [seen, setSeen] = useState(text);
   const [count, setCount] = useState(0);
   const [caretOn, setCaretOn] = useState(true);
+  if (seen !== text) {
+    setSeen(text);
+    setCount(0);
+  }
   const done = !active || count >= text.length;
 
   useEffect(() => {
@@ -154,23 +197,109 @@ export default function HomeScreen() {
   const rt = useRealtime();
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   const greeting = `${salutation()} Daniel!`;
-  const [greetingDone, setGreetingDone] = useState(false);
-  const markGreetingDone = useCallback(() => setGreetingDone(true), []);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const inflightKey = useRef<string | null>(null);
+  const lastText = useRef('');
+  const typedIds = useRef(new Set<string>());
+  const typedText = useRef(new Map<string, string>());
+  const [typedTick, setTypedTick] = useState(0);
+  const markTyped = useCallback((id: string) => {
+    if (typedIds.current.has(id)) return;
+    typedIds.current.add(id);
+    setTypedTick(tick => tick + 1);
+  }, []);
   const insets = useSafeAreaInsets();
   const tabBarHeight = (Platform.OS === 'ios' ? 49 : 56) + insets.bottom;
   const { lift, inset } = useKeyboardLift(tabBarHeight);
-  useFocusEffect(useCallback(() => realtime.acquireMarket(), []));
+  useFocusEffect(
+    useCallback(() => {
+      const release = realtime.acquireMarket();
+      void requestHomeBrief(clientKey('brief')).catch(() => undefined);
+      return release;
+    }, [])
+  );
+  useEffect(() => {
+    if (rt.status !== 'ready') return;
+    void requestHomeBrief(clientKey('brief')).catch(() => undefined);
+  }, [rt.status]);
+
+  const messages = rt.assistantMessages;
+  const brief = [...messages].reverse().find(message => message.kind === 'brief' && message.role === 'assistant');
+  const intro =
+    brief?.status === 'complete' && brief.body
+      ? brief.body
+      : brief?.status === 'pending'
+        ? 'Looking at today’s prices…'
+        : INTRO;
+  const chat = messages.filter(message => message.kind === 'chat');
+  const thinking = chat.some(message => message.role === 'assistant' && message.status === 'pending');
+  const send = useCallback(
+    async (raw: string) => {
+      const text = raw.trim();
+      if (!text || sending || thinking) return;
+      lastText.current = text;
+      const key = inflightKey.current ?? clientKey('ask');
+      inflightKey.current = key;
+      setSending(true);
+      setSendError(null);
+      try {
+        await askOrbit(key, text.slice(0, MAX_QUESTION));
+        inflightKey.current = null;
+        setDraft('');
+      } catch (err) {
+        setSendError(messageFor(toAppError(err).code));
+      } finally {
+        setSending(false);
+      }
+    },
+    [sending, thinking]
+  );
 
   const stocks = rt.market.stocks;
-  const hero = stocks.find(stock => stock.ticker === 'SPY') ?? stocks.find(stock => stock.kind === 'benchmark');
-  const heroQuote = hero ? rt.market.quotes[hero.ticker] : undefined;
-  const recommendations = rt.recommendations;
-  const checkout: StockVM[] =
-    recommendations.length > 0
-      ? recommendations
-          .map(item => stocks.find(stock => stock.ticker === item.ticker))
-          .filter((stock): stock is StockVM => stock != null)
-      : stocks.filter(stock => stock.kind === 'equity');
+  const historyIds = useRef<Set<string> | null>(null);
+  if ((rt.status === 'ready' || rt.hasSynced) && historyIds.current === null) {
+    historyIds.current = new Set(
+      messages.filter(message => message.role === 'assistant' && message.status === 'complete' && message.body).map(message => message.id)
+    );
+  }
+  const opened = historyIds.current !== null;
+  const remembered = (id: string) => historyIds.current?.has(id) ?? false;
+  const introIsRemembered = opened && !!(brief && remembered(brief.id));
+  const introParts = paragraphs(intro);
+  const blocks = [
+    { id: 'greeting', text: greeting },
+    ...(opened && !introIsRemembered ? introParts.map((text, index) => ({ id: `intro:${index}`, text })) : []),
+    ...(opened
+      ? chat
+      .filter(message => message.role === 'assistant' && !remembered(message.id))
+      .flatMap(message =>
+        paragraphs(message.body || (message.status === 'pending' ? 'Thinking…' : '')).map((text, index) => ({
+          id: `${message.id}:${index}`,
+          text,
+        }))
+      )
+      : []),
+  ];
+  const blockSignature = blocks.map(block => `${block.id}\u0000${block.text}`).join('\u0001');
+  const [seenSignature, setSeenSignature] = useState(blockSignature);
+  if (seenSignature !== blockSignature) {
+    setSeenSignature(blockSignature);
+    const live = new Set(blocks.map(block => block.id));
+    for (const block of blocks) {
+      const previous = typedText.current.get(block.id);
+      if (previous !== undefined && previous !== block.text) typedIds.current.delete(block.id);
+      typedText.current.set(block.id, block.text);
+    }
+    for (const id of typedIds.current) {
+      if (!live.has(id)) typedIds.current.delete(id);
+    }
+  }
+  void typedTick;
+  const typedThrough = (index: number) => blocks.slice(0, index).every(block => typedIds.current.has(block.id));
+  const introTyped = introIsRemembered || introParts.every((_, index) => typedIds.current.has(`intro:${index}`));
+  const briefTickers = introTyped && brief?.status === 'complete' ? tickersFor(brief.body, brief.citations, stocks) : [];
 
   function openTicker(ticker: string) {
     router.push({ pathname: '/stock/[ticker]', params: { ticker } });
@@ -212,56 +341,157 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <TypedText text={greeting} active onDone={markGreetingDone} style={styles.greeting} accessibilityRole="header" />
-          <TypedText text={INTRO} active={greetingDone} style={styles.intro} />
-
-          {hero ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${hero.ticker}`} onPress={() => openTicker(hero.ticker)}>
-              <StockGraph
-                title="S&P 500"
-                plain
-                price={heroQuote?.price ?? null}
-                previousClose={heroQuote?.previousClose}
-                points={chartSeries(rt.market.closes[hero.ticker], heroQuote)}
+          <TypedText
+            text={greeting}
+            active={typedThrough(0)}
+            onDone={() => markTyped('greeting')}
+            style={styles.greeting}
+            accessibilityRole="header"
+          />
+          {opened && introIsRemembered ? (
+            <Text style={styles.intro}>{intro}</Text>
+          ) : opened ? (
+            introParts.map((text, index) => (
+              <TypedText
+                key={`intro:${index}`}
+                text={text}
+                active={typedThrough(1 + index)}
+                onDone={() => markTyped(`intro:${index}`)}
+                style={styles.intro}
               />
+            ))
+          ) : null}
+          {briefTickers.map(ticker => {
+            const stock = stocks.find(item => item.ticker === ticker);
+            const quote = rt.market.quotes[ticker];
+            if (!stock) return null;
+            return (
+              <Pressable
+                key={ticker}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${stock.name || ticker}`}
+                onPress={() => openTicker(ticker)}>
+                <StockGraph
+                  title={stock.name || ticker}
+                  plain
+                  price={quote?.price ?? null}
+                  previousClose={quote?.previousClose}
+                  points={chartSeries(rt.market.closes[ticker], quote)}
+                />
+              </Pressable>
+            );
+          })}
+          {brief?.status === 'failed' ? (
+            <Pressable accessibilityRole="button" onPress={() => void requestHomeBrief(clientKey('brief'))}>
+              <Text style={styles.retry}>{brief.body || 'I couldn’t load today’s note. Tap to try again.'}</Text>
             </Pressable>
           ) : null}
+          <View style={styles.suggestions}>
+            {SUGGESTIONS.map(question => (
+              <Pressable
+                key={question}
+                accessibilityRole="button"
+                disabled={sending || thinking}
+                onPress={() => void send(question)}
+                style={styles.suggestion}>
+                <Text style={styles.suggestionText}>{question}</Text>
+              </Pressable>
+            ))}
+          </View>
 
-          <T variant="heading" style={styles.section}>
-            Stocks to Check Out!
-          </T>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-            {checkout.map(stock => {
-              const quote = rt.market.quotes[stock.ticker];
+          {chat.map((message, index) => {
+            if (message.role === 'user') {
               return (
-                <Pressable
-                  key={stock.ticker}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${stock.ticker}`}
-                  onPress={() => openTicker(stock.ticker)}
-                  style={styles.mini}>
-                  <StockGraph
-                    title={stock.name || stock.ticker}
-                    compact
-                    price={quote?.price ?? null}
-                    previousClose={quote?.previousClose}
-                    points={chartSeries(rt.market.closes[stock.ticker], quote)}
-                  />
-                </Pressable>
+                <Text key={message.id} style={styles.userLine}>
+                  {message.body}
+                </Text>
               );
-            })}
-          </ScrollView>
+            }
+            const parts = paragraphs(message.body || (message.status === 'pending' ? 'Thinking…' : ''));
+            const replyReady =
+              remembered(message.id) || parts.every((_, part) => typedIds.current.has(`${message.id}:${part}`));
+            return (
+              <View key={message.id} style={styles.threadItem}>
+                {remembered(message.id) ? (
+                  <Text style={styles.replyLine}>{message.body}</Text>
+                ) : (
+                  parts.map((text, part) => {
+                    const blockIndex = blocks.findIndex(block => block.id === `${message.id}:${part}`);
+                    return (
+                      <TypedText
+                        key={`${message.id}:${part}`}
+                        text={text}
+                        active={blockIndex >= 0 && typedThrough(blockIndex)}
+                        onDone={() => markTyped(`${message.id}:${part}`)}
+                        style={styles.replyLine}
+                      />
+                    );
+                  })
+                )}
+                {message.status === 'complete' && replyReady
+                  ? tickersFor(message.body, message.citations, stocks).map(ticker => {
+                      const stock = stocks.find(item => item.ticker === ticker);
+                      const quote = rt.market.quotes[ticker];
+                      if (!stock) return null;
+                      return (
+                        <Pressable
+                          key={ticker}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open ${stock.name || ticker}`}
+                          onPress={() => openTicker(ticker)}>
+                          <StockGraph
+                            title={stock.name || ticker}
+                            plain
+                            price={quote?.price ?? null}
+                            previousClose={quote?.previousClose}
+                            points={chartSeries(rt.market.closes[ticker], quote)}
+                          />
+                        </Pressable>
+                      );
+                    })
+                  : null}
+                {message.status === 'failed' ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      const previous = [...chat.slice(0, index)].reverse().find(item => item.role === 'user');
+                      if (previous) void send(previous.body);
+                    }}>
+                    <Text style={styles.retry}>Try again</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          })}
+          {sendError ? (
+            <Pressable accessibilityRole="button" onPress={() => void send(lastText.current || draft)}>
+              <Text style={styles.retry}>{sendError} Tap to retry.</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
 
         <Animated.View style={[styles.askWrap, { transform: [{ translateY: lift }] }]}>
+          <Text style={styles.notice}>For learning. Not a recommendation to buy or sell.</Text>
           <View style={styles.ask}>
             <TextInput
+              value={draft}
+              onChangeText={setDraft}
               placeholder="Ask Anything..."
               placeholderTextColor="#999999"
               style={styles.askInput}
               accessibilityLabel="Ask Anything"
+              maxLength={MAX_QUESTION}
+              editable={!sending}
+              returnKeyType="send"
+              onSubmitEditing={() => void send(draft)}
             />
-            <Pressable accessibilityRole="button" accessibilityLabel="Send" style={styles.askButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send"
+              accessibilityState={{ disabled: sending || thinking || draft.trim().length === 0 }}
+              disabled={sending || thinking || draft.trim().length === 0}
+              onPress={() => void send(draft)}
+              style={styles.askButton}>
               <Svg width={16} height={16} viewBox="0 0 16 16">
                 <Path
                   d="M8 12.5 V3.5 M3.8 7.4 L8 3.2 L12.2 7.4"
@@ -311,14 +541,26 @@ const styles = StyleSheet.create({
   },
   greeting: { fontFamily: font.bold, fontSize: 22, lineHeight: 28, color: '#FFFFFF' },
   intro: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.text, marginTop: -space.sm },
-  section: { fontFamily: font.bold, fontSize: 22, lineHeight: 28, color: '#FFFFFF' },
-  row: {
-    gap: space.md,
-    paddingRight: space.xl,
-    paddingVertical: space.lg,
-    overflow: 'visible',
+  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  suggestion: {
+    borderRadius: 16,
+    backgroundColor: '#1E1F20',
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
-  mini: { width: 176 },
+  suggestionText: { fontFamily: font.regular, fontSize: 14, lineHeight: 18, color: colors.text },
+  threadItem: { gap: space.md },
+  userLine: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: '#FFFFFF', textAlign: 'right' },
+  replyLine: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.text },
+  retry: { fontFamily: font.regular, fontSize: 14, lineHeight: 20, color: '#FFFFFF' },
+  notice: {
+    fontFamily: font.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#999999',
+    textAlign: 'center',
+    marginBottom: space.sm,
+  },
   askWrap: {
     position: 'absolute',
     left: space.lg,

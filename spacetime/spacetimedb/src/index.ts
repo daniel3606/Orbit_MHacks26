@@ -16,6 +16,7 @@ export {
   requestMarketIngest,
 } from './jobs';
 export { publishRecommendations } from './recommendations';
+export { enqueueAssistantMessage, requestHomeBrief, publishAssistantReply } from './assistant';
 export { bindPaperDemo, rebindPaperDemo, createPaperOrderIntent, requestPaperSync, requestPaperReconcile, applyPaperSnapshot } from './paper';
 export {
   marketTick,
@@ -43,6 +44,10 @@ export {
   workerJobProfiles,
   workerPaperOrders,
   workerPaperAccount,
+  myAssistantMessages,
+  workerAssistantPositions,
+  workerAssistantMessages,
+  workerAssistantRecommendations,
 } from './views';
 
 const DEFAULT_MARKET_INTERVAL_SECONDS = 300;

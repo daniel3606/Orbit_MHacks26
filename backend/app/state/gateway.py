@@ -224,3 +224,20 @@ class SpacetimeGateway:
 
     async def request_paper_reconcile(self) -> None:
         await self.call_reducer("request_paper_reconcile", [])
+
+    async def worker_assistant_messages(self) -> list[dict[str, Any]]:
+        return await self._view("worker_assistant_messages")
+
+    async def worker_assistant_positions(self) -> list[dict[str, Any]]:
+        return await self._view("worker_assistant_positions")
+
+    async def worker_assistant_recommendations(self) -> list[dict[str, Any]]:
+        return await self._view("worker_assistant_recommendations")
+
+    async def publish_assistant_reply(
+        self, job_id: int, attempt: int, reply_client_key: str, body: str, citations: str, status: str
+    ) -> None:
+        await self.call_reducer(
+            "publish_assistant_reply",
+            [job_id, attempt, reply_client_key, body, citations, status],
+        )
