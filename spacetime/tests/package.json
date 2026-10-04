@@ -5,7 +5,7 @@
   "scripts": {
     "publish:test-db": "spacetime publish orbit-test --server local --module-path ../spacetimedb --delete-data=always --no-config --yes",
     "typecheck": "tsc --noEmit -p .",
-    "test": "npm run publish:test-db && node --import tsx --test --test-concurrency=1 --test-reporter=spec integration.test.ts market.test.ts recommendations.test.ts paper.test.ts assistant.test.ts discovery.test.ts"
+    "test": "npm run publish:test-db && node --import tsx --test --test-concurrency=1 --test-reporter=spec integration.test.ts market.test.ts recommendations.test.ts paper.test.ts assistant.test.ts discovery.test.ts notifications.test.ts"
   },
   "dependencies": {
     "spacetimedb": "2.10.2"

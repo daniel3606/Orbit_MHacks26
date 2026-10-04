@@ -45,6 +45,8 @@ import CreatePaperOrderIntentReducer from "./create_paper_order_intent_reducer";
 import EnqueueAssistantMessageReducer from "./enqueue_assistant_message_reducer";
 import FailJobReducer from "./fail_job_reducer";
 import GrantServiceIdentityReducer from "./grant_service_identity_reducer";
+import MarkAllNotificationsReadReducer from "./mark_all_notifications_read_reducer";
+import MarkNotificationReadReducer from "./mark_notification_read_reducer";
 import PublishAssistantReplyReducer from "./publish_assistant_reply_reducer";
 import PublishDailyDiscoveryReducer from "./publish_daily_discovery_reducer";
 import PublishMarketSnapshotReducer from "./publish_market_snapshot_reducer";
@@ -76,6 +78,7 @@ import MyBrandingRow from "./my_branding_table";
 import MyDailyDiscoveryRow from "./my_daily_discovery_table";
 import MyDiscoveryItemsRow from "./my_discovery_items_table";
 import MyJobsRow from "./my_jobs_table";
+import MyNotificationsRow from "./my_notifications_table";
 import MyPaperAccessRow from "./my_paper_access_table";
 import MyPaperAccountRow from "./my_paper_account_table";
 import MyPaperOrdersRow from "./my_paper_orders_table";
@@ -209,6 +212,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyJobsRow),
+  myNotifications: __table({
+    name: 'my_notifications',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyNotificationsRow),
   myPaperAccess: __table({
     name: 'my_paper_access',
     indexes: [
@@ -350,6 +360,8 @@ const reducersSchema = __reducers(
   __reducerSchema("enqueue_assistant_message", EnqueueAssistantMessageReducer),
   __reducerSchema("fail_job", FailJobReducer),
   __reducerSchema("grant_service_identity", GrantServiceIdentityReducer),
+  __reducerSchema("mark_all_notifications_read", MarkAllNotificationsReadReducer),
+  __reducerSchema("mark_notification_read", MarkNotificationReadReducer),
   __reducerSchema("publish_assistant_reply", PublishAssistantReplyReducer),
   __reducerSchema("publish_daily_discovery", PublishDailyDiscoveryReducer),
   __reducerSchema("publish_market_snapshot", PublishMarketSnapshotReducer),

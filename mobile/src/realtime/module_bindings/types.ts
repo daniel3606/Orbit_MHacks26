@@ -243,6 +243,9 @@ export type MyDiscoveryItems = __Infer<typeof MyDiscoveryItems>;
 export const MyJobs = __t.object("MyJobs", {});
 export type MyJobs = __Infer<typeof MyJobs>;
 
+export const MyNotifications = __t.object("MyNotifications", {});
+export type MyNotifications = __Infer<typeof MyNotifications>;
+
 export const MyPaperAccess = __t.object("MyPaperAccess", {});
 export type MyPaperAccess = __Infer<typeof MyPaperAccess>;
 
@@ -266,6 +269,20 @@ export type MyRecommendations = __Infer<typeof MyRecommendations>;
 
 export const MyServiceGrant = __t.object("MyServiceGrant", {});
 export type MyServiceGrant = __Infer<typeof MyServiceGrant>;
+
+export const Notification = __t.object("Notification", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  kind: __t.string(),
+  title: __t.string(),
+  body: __t.string(),
+  ticker: __t.option(__t.string()),
+  href: __t.option(__t.string()),
+  dedupeKey: __t.string(),
+  readAt: __t.option(__t.timestamp()),
+  createdAt: __t.timestamp(),
+});
+export type Notification = __Infer<typeof Notification>;
 
 export const PaperAccount = __t.object("PaperAccount", {
   owner: __t.identity(),

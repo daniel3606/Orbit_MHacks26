@@ -19,6 +19,7 @@ export { publishRecommendations } from './recommendations';
 export { requestDailyDiscovery, publishDailyDiscovery } from './discovery';
 export { enqueueAssistantMessage, requestHomeBrief, clearAssistantChat, publishAssistantReply } from './assistant';
 export { bindPaperDemo, rebindPaperDemo, createPaperOrderIntent, requestPaperSync, requestPaperReconcile, applyPaperSnapshot } from './paper';
+export { markNotificationRead, markAllNotificationsRead } from './notifications';
 export {
   marketTick,
   configureMarketSchedule,
@@ -38,6 +39,7 @@ export {
   myPaperAccount,
   myPaperPositions,
   myPaperOrders,
+  myNotifications,
   myServiceGrant,
   workerJobs,
   marketCloses,

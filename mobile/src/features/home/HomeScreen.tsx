@@ -445,10 +445,19 @@ export default function HomeScreen() {
                   </Svg>
                 </Pressable>
               ) : null}
-              <View accessibilityLabel="Notifications" style={styles.bellWrap}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  rt.notifications.some(item => !item.read)
+                    ? 'Notifications, unread'
+                    : 'Notifications'
+                }
+                onPress={() => router.push('/notifications')}
+                hitSlop={8}
+                style={({ pressed }) => [styles.bellWrap, { opacity: pressed ? 0.6 : 1 }]}>
                 <Image source={bell} style={styles.bell} resizeMode="contain" accessibilityIgnoresInvertColors />
-                <View style={styles.badge} />
-              </View>
+                {rt.notifications.some(item => !item.read) ? <View style={styles.badge} /> : null}
+              </Pressable>
             </View>
           </View>
 

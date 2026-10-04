@@ -106,6 +106,7 @@ before(async () => {
     'SELECT * FROM my_paper_account',
     'SELECT * FROM my_paper_positions',
     'SELECT * FROM my_paper_orders',
+    'SELECT * FROM my_notifications',
   ]);
   await subscribe(other.conn, ['SELECT * FROM my_paper_access', 'SELECT * FROM my_paper_orders']);
 });
@@ -302,6 +303,12 @@ describe('paper orders', () => {
     );
     assert.equal(partial.filledQuantityMicros, 400_000n);
     assert.equal([...demo.conn.db.myPaperOrders.iter()].filter(row => row.clientOrderKey === 'orbit-partial01').length, 1);
+    const partialNotice = await waitFor('partial notice', () =>
+      [...demo.conn.db.myNotifications.iter()].find(
+        row => row.dedupeKey === 'order:orbit-partial01:partially_filled'
+      )
+    );
+    assert.match(partialNotice.title, /CAT/);
 
     await demo.conn.reducers.createPaperOrderIntent({
       ticker: 'CAT',
@@ -344,6 +351,10 @@ describe('paper orders', () => {
         },
       ],
     });
+    const rejectNotice = await waitFor('reject notice', () =>
+      [...demo.conn.db.myNotifications.iter()].find(row => row.dedupeKey === 'order:orbit-rejected1:rejected')
+    );
+    assert.match(rejectNotice.body, /insufficient_cash/);
     const rejected = await waitFor('rejected', () =>
       [...demo.conn.db.myPaperOrders.iter()].find(
         row => row.clientOrderKey === 'orbit-rejected1' && row.status === 'rejected'

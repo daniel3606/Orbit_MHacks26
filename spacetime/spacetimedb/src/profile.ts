@@ -3,6 +3,7 @@ import spacetimedb from './schema';
 import { requireConsumer, type Ctx } from './auth';
 import { enqueueRecommendationRefresh } from './jobs';
 import { repointQueuedDiscovery } from './discovery';
+import { notifyWelcome } from './notifications';
 import { PROFILE_SCHEMA_VERSION } from './preferences';
 import { validatePreferences, validateZodiac, type PreferenceInput } from './validation';
 
@@ -48,6 +49,7 @@ export const completeOnboarding = spacetimedb.reducer(preferenceArgs, (ctx, args
     updatedAt: ctx.timestamp,
   });
   saveBranding(ctx, zodiacSign);
+  notifyWelcome(ctx, ctx.sender);
   enqueueRecommendationRefresh(ctx, ctx.sender, 1);
 });
 
