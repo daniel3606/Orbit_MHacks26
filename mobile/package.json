@@ -6,6 +6,7 @@
     "@expo-google-fonts/manrope": "^0.4.2",
     "@expo/ui": "~57.0.21",
     "expo": "~57.0.26",
+    "expo-blur": "~57.0.3",
     "expo-constants": "~57.0.20",
     "expo-device": "~57.0.2",
     "expo-font": "~57.0.4",
