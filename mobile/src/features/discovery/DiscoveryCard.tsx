@@ -1,5 +1,4 @@
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
@@ -7,7 +6,10 @@ import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated'
 import { ago, money, signedPct } from '@/features/market/format';
 import { StockLogo } from '@/features/market/StockLogo';
 import type { DiscoveryItemVM, QuoteVM, StockVM } from '@/realtime/connection';
-import { colors, font, graphFillOpacity, radius, space } from '@/ui/theme';
+import { colors, font, radius, space } from '@/ui/theme';
+
+/** Solid fill for Discover company cards — dark purple, no gradient. */
+const CARD_FILL = '#120528';
 
 /** Moves smaller than this read as unchanged, so a flat day is not coloured as a gain. */
 const FLAT = 0.00005;
@@ -72,12 +74,6 @@ export function DiscoveryCard({
         onPress={open}
         style={({ pressed }) => [styles.shadow, { transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
         <View style={styles.card}>
-          <LinearGradient
-            colors={[`rgba(0, 0, 0, ${graphFillOpacity})`, `rgba(31, 4, 87, ${graphFillOpacity})`]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
           <View style={styles.top}>
             <StockLogo ticker={item.ticker} logoUrl={stock?.logoUrl ?? ''} size={44} />
             <View style={styles.identity}>
@@ -145,6 +141,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     padding: space.lg + 2,
     gap: space.md,
+    backgroundColor: CARD_FILL,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
