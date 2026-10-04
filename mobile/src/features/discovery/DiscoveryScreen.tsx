@@ -14,6 +14,7 @@ import { requestDailyDiscovery } from '@/features/profile/actions';
 import { ConnectionBanner } from '@/features/session/ConnectionBanner';
 import { realtime } from '@/realtime/connection';
 import { useRealtime } from '@/realtime/hooks';
+import { rememberSign, useCachedSign } from '@/state/sign-cache';
 import { backgroundGradient, colors, font, HIT, radius, space } from '@/ui/theme';
 
 const WORKING = new Set(['queued', 'running', 'retry_wait']);
@@ -66,14 +67,22 @@ export default function DiscoveryScreen() {
   }
 
   const shown = todays ?? (!live ? earlier : null);
-  const sign = shown?.zodiacSign ?? rt.branding?.zodiacSign ?? null;
+  const cached = useCachedSign();
+  const accountSign = rt.hasSynced ? (rt.branding?.zodiacSign ?? null) : cached.sign;
+  const sign = shown?.zodiacSign ?? accountSign;
+  // Before the first sync, wait for the device's remembered sign rather than flashing "Your Orbit".
+  const signPending = !sign && !rt.hasSynced && (!cached.loaded || rt.status !== 'error');
+
+  useEffect(() => {
+    if (rt.hasSynced) rememberSign(rt.branding?.zodiacSign ?? null);
+  }, [rt.hasSynced, rt.branding?.zodiacSign]);
   const stocks = rt.market.stocks;
 
   return (
     <View style={styles.root}>
       <LinearGradient colors={backgroundGradient} locations={[0, 0.5, 1] as const} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <ZodiacHeader sign={sign} width={width} />
+        <ZodiacHeader sign={sign} width={width} pending={signPending} />
 
         <View style={styles.body}>
           <ConnectionBanner />

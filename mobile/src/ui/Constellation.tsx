@@ -31,6 +31,13 @@ export function signLabel(sign: string): string {
   return sign.charAt(0).toUpperCase() + sign.slice(1);
 }
 
+/** Starts loading `sign`'s image before Discover is opened, so it is ready when the header draws. */
+export function prefetchConstellation(sign: string) {
+  if (!isSign(sign)) return;
+  const uri = Image.resolveAssetSource(CONSTELLATIONS[sign].asset)?.uri;
+  if (uri) void Image.prefetch(uri).catch(() => undefined);
+}
+
 /**
  * Draws `sign` so its stars and lines fit a `width` × `height` box centred on
  * (`centerX`, `centerY`) of the parent. The glow spills outside the box.
@@ -41,12 +48,15 @@ export function Constellation({
   height,
   centerX,
   centerY,
+  onLoad,
 }: {
   sign: Sign;
   width: number;
   height: number;
   centerX: number;
   centerY: number;
+  /** Called once the image is drawn, or has failed and will not be. */
+  onLoad?: () => void;
 }) {
   const art = CONSTELLATIONS[sign];
   const fit = Math.min(width / art.w, height / art.h);
@@ -67,6 +77,8 @@ export function Constellation({
         style={{ width: art.svgW * fit, height: art.svgH * fit }}
         resizeMode="stretch"
         fadeDuration={0}
+        onLoad={onLoad}
+        onError={onLoad}
         accessibilityIgnoresInvertColors
       />
     </View>
