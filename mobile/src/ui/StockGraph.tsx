@@ -9,7 +9,7 @@ import { colors, font, graphFillOpacity, radius, space } from '@/ui/theme';
 
 const CHART_HEIGHT = 148;
 
-type Point = { x: number; y: number };
+export type Point = { x: number; y: number };
 
 function changeCopy(amount: number, fraction: number): string {
   const sign = amount >= 0 ? '+' : '−';
@@ -52,11 +52,11 @@ function plot(
 }
 
 /** Solid star radius. Segments stop just outside each star. */
-const DOT_RADIUS = 4;
-const LINE_GAP = 6;
+export const DOT_RADIUS = 4;
+export const LINE_GAP = 6;
 /** Soft bloom under the constellation. Stronger than the earlier 45% line glow. */
-const GLOW_OPACITY = 0.8;
-const GLOW_BLUR = 8;
+export const GLOW_OPACITY = 0.8;
+export const GLOW_BLUR = 8;
 
 type Segment = { x1: number; y1: number; x2: number; y2: number };
 
@@ -64,7 +64,7 @@ type Segment = { x1: number; y1: number; x2: number; y2: number };
 const DENSE_SERIES = 12;
 
 /** Endpoints, plus any close that is a local high or low. Long series keep only the endpoints and the range extremes. */
-function starIndexes(values: number[]): number[] {
+export function starIndexes(values: number[]): number[] {
   if (values.length > DENSE_SERIES) {
     const high = values.indexOf(Math.max(...values));
     const low = values.indexOf(Math.min(...values));
@@ -84,7 +84,7 @@ function starIndexes(values: number[]): number[] {
 }
 
 /** Break the path just short of each star so the dots read as a constellation. */
-function segments(points: Point[], stars: Set<number>, inset: number): Segment[] {
+export function segments(points: Point[], stars: Set<number>, inset: number): Segment[] {
   const drawn: Segment[] = [];
   for (let index = 0; index < points.length - 1; index += 1) {
     const start = points[index];
